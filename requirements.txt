@@ -1,0 +1,9 @@
+# Cloud + local (cross-platform). Versions are the ones this app was tested with.
+streamlit==1.65.0
+pandas==3.0.6
+yfinance==1.7.0
+plotly==7.1.0
+streamlit-aggrid==1.2.1.post2
+beautifulsoup4==4.14.3
+requests
+tzdata

@@ -1,0 +1,11 @@
+# 機敏／本機專用檔案，永遠不要上傳
+.streamlit/secrets.toml
+*.pfx
+*.p12
+huanan_dll/
+huanan_orders.jsonl
+huanan_bridge.log
+capital_quotes.json
+capital_orders.jsonl
+__pycache__/
+*.pyc
