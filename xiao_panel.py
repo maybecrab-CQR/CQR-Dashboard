@@ -46,6 +46,8 @@ CSS = """<style>
 .sig-hot{background:#4a1f22;color:#ffb3b5;border:1px solid #a8474b}.sig-warm{background:#3b3423;color:#efc979;border:1px solid #67583b}
 .sig-info{background:#1c2d42;color:#9cc7f5;border:1px solid #35557a}.sig-idle{background:#1a2431;color:#a9b6c9;border:1px solid #344353}
 .sig-muted{background:#141b25;color:#6f7d90;border:1px solid #263140}
+.sig-cards.six{grid-template-columns:repeat(6,minmax(0,1fr))}.sig-cards.six .sig-card b{font-size:19px!important;white-space:nowrap}
+.sig-warn{background:#3d2a12;color:#ffc46b;border:1px solid #8a5a1c;flex:none}
 .sig-ev{color:#9fb0c4;font-size:12px;white-space:normal;margin-top:3px;line-height:1.35;max-width:300px}
 .sig-sel td{background:#2a2b24!important}.sig-ok{color:#f17c7e}.sig-no{color:#55667a}
 .sig-note{font-size:12px;color:#7f8ea3;margin-top:6px}
@@ -208,23 +210,31 @@ def _live_v2(cands):
     mkt_bull = bool((idx > idx.rolling(60).mean()).iat[-1])
     for t, (c, x) in data.items():
         last = x.index[-1]
-        sec_rs = pd.Series(np.nan, index=x.index); sec_rs.iat[-1] = c["sector_rs"]
-        sec_rank = pd.Series(np.nan, index=x.index); sec_rank.iat[-1] = rank.get(t, 99)
+        # 族群強弱只有今天的值（取自儀表板掃描）；歷史訊號標記沿用今天的族群條件，只供參考
+        sec_rs = pd.Series(c["sector_rs"], index=x.index)
+        sec_rank = pd.Series(rank.get(t, 99), index=x.index)
         xs.add_features(x, sec_rs, sec_rank, idx)
-        st_ = xs.today_state(x)
+        xs.add_v3(x, idx)
+        pref = c["sector"] in xs.PREFERRED
+        st_ = xs.today_state3(x, preferred=pref)
+        checks = xs.checks_v3(x)
+        checks["偏好族群"] = pref
         rows.append({"date": last.date(), "code": c["code"], "name": c["name"], "sector": c["sector"], "state": st_["state"],
                      "close": x.c.iat[-1], "stop": st_["stop"], "high": st_["high"], "sec_rank": rank.get(t, np.nan),
-                     "futures": "", "note": st_["note"], "mkt_bull": mkt_bull, "checks": _checks(x, mkt_bull)})
+                     "futures": "", "note": st_["note"], "warn": st_["warn"], "mkt_bull": mkt_bull, "checks": checks,
+                     "marks": _marks(x, pref)})
     return pd.DataFrame(rows), stamp
 
 
-def _checks(x, mkt_bull):
-    """v2 進場條件逐項檢查（最後一根日 K）。"""
-    t = len(x) - 1
-    return {"大盤多頭": mkt_bull, "流動性": bool(x.liquid.iat[t]), "站上21MA": bool(x.c.iat[t] > x.ma21.iat[t]),
-            "均線扣低": bool(x.fast_up.iat[t] and x.slow_up.iat[t]), "強於大盤": bool(x.rs10.iat[t] > 0),
-            "量在峰": bool(x.vol_peak.iat[t] >= 1), "均量轉強": bool(x.money_in.iat[t]),
-            "族群強": bool(x.sec_rs.iat[t] > 0), "族群前三": bool(x.sec_rank.iat[t] <= xs.Q["top_in_sector"])}
+def _marks(x, pref, bars=250):
+    """最近一年的歷史訊號日（給 K 線標記用）：v3 波段量啟動、v2 凹洞量轉折。"""
+    lo = max(0, len(x) - bars)
+    bull = x.mkt_bull.values
+    out = []
+    if pref:
+        out += [(str(x.index[i].date()), "v3", float(s)) for i, s in xs.entries_wave(x, trend=True) if i >= lo and bull[i]]
+    out += [(str(x.index[i].date()), "v2", float(s)) for i, s in xs.entries_v2(x) if i >= lo and bull[i]]
+    return tuple(sorted(out))
 
 
 @st.cache_data(ttl=300, show_spinner=False, max_entries=16)
@@ -236,7 +246,7 @@ def scan_states(cands):
     return {str(r["code"]): r for r in scan.to_dict("records")}, stamp
 
 
-SHORT = {"signal": "轉折訊號", "setup": "量縮整理", "trend": "趨勢・無型態", "none": "盤前不符"}
+SHORT = {"signal3": "v3 波段啟動", "signal": "v2 轉折", "wave": "波段進行中", "setup": "量縮整理", "trend": "趨勢・無型態", "none": "盤前不符"}
 
 
 def state_label(row):
@@ -256,17 +266,47 @@ def render_status(row, stamp):
     checks = row.get("checks") or {}
     chips = "".join(f'<span class="sx-chip {"ok" if ok else "no"}">{"✓" if ok else "✗"} {escape(k)}</span>' for k, ok in checks.items())
     note = escape(str(row["note"])) if isinstance(row.get("note"), str) and row["note"] else "—"
-    st.markdown(f'<div class="sx-bar"><div class="sx-top"><span class="sig-badge {cls}">{label}</span><span class="sx-note" title="{note}">{note}</span>'
+    warn = row.get("warn") if isinstance(row.get("warn"), str) else ""
+    warn_html = f'<span class="sig-badge sig-warn" title="持股出場警示">⚠ {escape(warn)}</span>' if warn else ""
+    st.markdown(f'<div class="sx-bar"><div class="sx-top"><span class="sig-badge {cls}">{label}</span>{warn_html}<span class="sx-note" title="{note}">{note}</span>'
                 + "".join(f'<span class="sx-num"><i>{a}</i>{b}</span>' for a, b in nums)
                 + f'</div><div class="sx-chips">{chips}<span class="sx-stamp">日線 {row["date"]} · 取得 {escape(stamp)}</span></div></div>',
                 unsafe_allow_html=True)
 
 
-V2_STATE = {"signal": ("凹洞量轉折訊號", "sig-hot", 0), "setup": ("量縮整理中", "sig-warm", 1),
-            "trend": ("盤前符合・無型態", "sig-idle", 2), "none": ("盤前不符", "sig-muted", 3)}
+V2_STATE = {"signal3": ("v3 波段量啟動", "sig-hot", 0), "signal": ("v2 凹洞量轉折", "sig-hot", 1),
+            "setup": ("量縮整理中", "sig-warm", 2), "wave": ("波段進行中", "sig-info", 3),
+            "trend": ("盤前符合・無型態", "sig-idle", 4), "none": ("盤前不符", "sig-muted", 5)}
+
+
+def _fwd_stats(fwd):
+    closed = fwd[fwd.status == "已出場"] if fwd is not None and not fwd.empty else pd.DataFrame()
+    if closed.empty:
+        return 0 if fwd is None else len(fwd), 0, "—"
+    return len(fwd), len(closed), f"{(closed.ret_net_stock > 0).mean() * 100:.0f}% / {closed.ret_net_stock.mean() * 100:+.2f}%"
+
+
+def _fwd_table(fwd, height):
+    if fwd is None or fwd.empty:
+        st.markdown('<div class="sig-note">尚無紀錄。排程每個交易日 14:45 執行，出現訊號（且大盤為多頭）時才會記錄；累積 2～3 個月才有參考價值。</div>', unsafe_allow_html=True)
+        return
+    fwd = fwd.sort_values("date", ascending=False)
+    head = "".join(f"<th>{h}</th>" for h in ["訊號日", "代號", "名稱", "進場（收盤）", "停損", "狀態", "毛報酬%", "扣現股成本%", "持有天", "出場原因"])
+    body = ""
+    for r in fwd.itertuples():
+        g = float(getattr(r, "ret_gross", 0) or 0) * 100
+        raw = getattr(r, "ret_net_stock", np.nan)
+        net = float(raw) * 100 if raw is not None and np.isfinite(float(raw)) else np.nan
+        cls = ' class="acct-up"' if g > 0 else ' class="acct-down"' if g < 0 else ""
+        why = getattr(r, "exit_reason", "")
+        body += (f"<tr><td>{str(r.date)[:10]}</td><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{_fmt(r.close)}</td>"
+                 f"<td>{_fmt(r.stop)}</td><td>{escape(str(r.status))}</td><td{cls}>{_fmt(g, 2, True)}</td><td>{_fmt(net, 2, True)}</td>"
+                 f"<td>{_fmt(r.days, 0)}</td><td>{escape(why) if isinstance(why, str) else ''}</td></tr>")
+    st.markdown(f'<div class="sig-wrap" style="max-height:{height}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
 
 
 def render_v2(cands, selected_code, workspace):
+    """前瞻紀錄頁：今日全市場訊號（排程掃描）＋ v3／v2 前瞻紀錄。"""
     scan, source = _read_csv("latest_scan.csv"), "排程掃描（全市場，每個交易日 14:45 更新）"
     if scan is None:
         if not cands:
@@ -283,50 +323,37 @@ def render_v2(cands, selected_code, workspace):
     asof = str(scan["date"].iloc[0]) if not scan.empty else "—"
     bull = bool(scan["mkt_bull"].iloc[0]) if "mkt_bull" in scan and not scan.empty else None
     scan["order"] = scan["state"].map(lambda k: V2_STATE.get(k, ("", "", 9))[2])
-    scan = scan[scan.state.isin(["signal", "setup"])].sort_values(["order", "sec_rank"])
-    fwd = _read_csv("forward_status.csv")
-    closed = fwd[fwd.status == "已出場"] if fwd is not None and not fwd.empty else pd.DataFrame()
-    win = f"{(closed.ret_net_stock > 0).mean() * 100:.0f}%" if not closed.empty else "—"
-    avg = f"{closed.ret_net_stock.mean() * 100:+.2f}%" if not closed.empty else "—"
+    today = scan[scan.state.isin(["signal3", "signal", "setup"])].sort_values(["order", "sec_rank"])
+    n = lambda k: int((scan.state == k).sum())
+    f3, f2 = _read_csv("forward_status_v3.csv"), _read_csv("forward_status.csv")
+    t3, c3, s3 = _fwd_stats(f3)
     bull_txt = "—" if bull is None else ("多頭（可做多）" if bull else "空頭（不做多）")
-    st.markdown(f'<div class="sig-head"><b>日線凹洞量轉折（蕭氏 v2）</b><span>資料日 {asof} · {escape(source)}</span></div>', unsafe_allow_html=True)
-    cards = [("大盤濾網", bull_txt), ("今日轉折訊號", int((scan.state == "signal").sum())), ("量縮整理中", int((scan.state == "setup").sum())),
-             ("前瞻紀錄（已出場）", f"{0 if fwd is None else len(fwd)}（{len(closed)}）"), ("前瞻勝率／平均（扣現股成本）", f"{win} / {avg}")]
-    st.markdown('<div class="sig-cards">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b></div>'
-                                                    for a, b in cards) + "</div>", unsafe_allow_html=True)
-    head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損（回檔低點）", "攻擊段高點", "族群內排名", "股期"])
+    st.markdown(f'<div class="sig-head"><b>蕭氏日線訊號 · 前瞻紀錄</b><span>資料日 {asof} · {escape(source)}</span></div>', unsafe_allow_html=True)
+    cards = [("大盤濾網", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
+             ("量縮整理／波段進行中", f"{n('setup')}／{n('wave')}"), ("v3 紀錄（已出場）", f"{t3}（{c3}）"), ("v3 前瞻勝率／平均", s3)]
+    st.markdown('<div class="sig-cards six">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b></div>'
+                                                        for a, b in cards) + "</div>", unsafe_allow_html=True)
+    head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "族群內", "股期"])
     body = ""
-    for r in scan.itertuples():
+    for r in today.itertuples():
         label, cls, _ = V2_STATE.get(r.state, (r.state, "sig-idle", 9))
         sel = ' class="sig-sel"' if str(r.code) == str(selected_code) else ""
         note = f'<div class="sig-ev">{escape(str(r.note))}</div>' if isinstance(r.note, str) and r.note else ""
-        fut = r.futures if isinstance(r.futures, str) and r.futures else "—"
+        fut = r.futures if isinstance(getattr(r, "futures", ""), str) and r.futures else "—"
         body += (f"<tr{sel}><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{escape(str(r.sector))}</td>"
                  f'<td><span class="sig-badge {cls}">{label}</span>{note}</td><td>{_fmt(r.close)}</td><td>{_fmt(r.stop)}</td>'
                  f"<td>{_fmt(r.high)}</td><td>{_fmt(r.sec_rank, 0)}</td><td>{escape(fut)}</td></tr>")
     if not body:
-        body = f'<tr><td class="empty" colspan="9">今天沒有訊號或量縮整理中的股票</td></tr>'
-    half = max(160, (workspace - 210) // 2)
+        body = '<tr><td class="empty" colspan="9">今天沒有訊號或量縮整理中的股票</td></tr>'
+    half = max(160, (workspace - 250) // 2)
     st.markdown(f'<div class="sig-wrap" style="max-height:{half}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="acct-title" style="margin-top:10px">前瞻紀錄<small>每筆訊號以訊號日收盤進場，依同一套出場規則追蹤到今天</small></div>', unsafe_allow_html=True)
-    if fwd is None or fwd.empty:
-        st.markdown('<div class="sig-note">尚無紀錄。排程每個交易日 14:45 執行，出現訊號（且大盤為多頭）時才會記錄；累積 2～3 個月才有參考價值。</div>', unsafe_allow_html=True)
-    else:
-        fwd = fwd.sort_values("date", ascending=False)
-        head2 = "".join(f"<th>{h}</th>" for h in ["訊號日", "代號", "名稱", "進場（收盤）", "停損", "狀態", "毛報酬%", "扣現股成本%", "持有天", "出場原因"])
-        body2 = ""
-        for r in fwd.itertuples():
-            g = r.ret_gross * 100
-            net = r.ret_net_stock * 100 if np.isfinite(r.ret_net_stock) else np.nan
-            cls = ' class="acct-up"' if g > 0 else ' class="acct-down"' if g < 0 else ""
-            body2 += (f"<tr><td>{str(r.date)[:10]}</td><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{_fmt(r.close)}</td>"
-                      f"<td>{_fmt(r.stop)}</td><td>{escape(str(r.status))}</td><td{cls}>{_fmt(g, 2, True)}</td><td>{_fmt(net, 2, True)}</td>"
-                      f"<td>{_fmt(r.days, 0)}</td><td>{escape(str(r.exit_reason)) if isinstance(r.exit_reason, str) else ''}</td></tr>")
-        st.markdown(f'<div class="sig-wrap" style="max-height:{half}px"><table class="acct"><tr>{head2}</tr>{body2}</table></div>', unsafe_allow_html=True)
-    st.markdown('<div class="sig-note">v2 規則：盤前（流動性、站上21MA、8/21MA扣低、強於大盤、量在峰）＋ 均量線轉強（5MV＞13MV）＋ 強勢族群前三強；'
-                '攻擊後回檔量縮價穩、守住攻擊日低點，當日量回升且大於 5 天前（凹洞量扣低）→ 收盤買。出場：跌破回檔低點／21MA、均線扣高反轉、'
-                '極限大量後量縮不見高先出一半。回測（2015-2026）樣本少、證據偏弱，只供參考。</div>', unsafe_allow_html=True)
+    which = st.segmented_control("前瞻紀錄", ["v3 波段量啟動", "v2 凹洞量轉折"], default="v3 波段量啟動", key="fwd_which",
+                                 label_visibility="collapsed") or "v3 波段量啟動"
+    _fwd_table(f3 if which.startswith("v3") else f2, half)
+    st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
+                '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出一半）。'
+                '回測 2015-20／2021-26 每筆平均 +1.8%／+2.1%（現股）、勝率約 36～40%；同時持有 5 檔年化約 5%／27%（大盤 8%／22%）。'
+                'v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。</div>', unsafe_allow_html=True)
 
 
 # ======================= v1：盤中 15 分 K =======================

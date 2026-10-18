@@ -1379,7 +1379,8 @@ def plotly_bundle():
 
 
 @st.cache_data(ttl=300,show_spinner=False,max_entries=32)
-def chart_html(frame, ticker, interval, height=600):
+def chart_html(frame, ticker, interval, height=600, marks=(), levels=()):
+    """marks：((日期, 'v3'|'v2', 停損), ...) 歷史訊號標記；levels：((價格, 標籤, 顏色), ...) 水平參考線。只用在日 K。"""
     df = indicators(frame)
     labels = df.index.strftime("%Y-%m-%d %H:%M" if interval.endswith("m") else "%Y-%m-%d").tolist()
     x = list(range(len(df)))  # 連續交易棒座標，週末與休市不佔空間
@@ -1397,6 +1398,20 @@ def chart_html(frame, ticker, interval, height=600):
     for n,color in zip((5,13,34),colors):
         fig.add_trace(go.Scatter(x=x,y=df[f"VMA{n}"].tolist(),name=f"VMA{n}",line=dict(color=color,width=1,dash="dot"),
             hovertemplate=f"VMA{n} %{{y:,.0f}}<extra></extra>"),row=2,col=1)
+    # 訊號標記與參考線一定加在最後：圖內 JS 以序號 1～8 對應均線／均量（自動 Y 軸用）
+    if interval=="1d" and marks:
+        pos={d:i for i,d in enumerate(labels)}
+        for kind,color,name in (("v3","#f2c14e","v3 波段量啟動"),("v2","#5fd0ff","v2 凹洞量轉折")):
+            pts=[(pos[d],float(df.Low.iloc[pos[d]])) for d,k,_ in marks if k==kind and d in pos]
+            if pts:
+                fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=[lo*0.985 for _,lo in pts],mode="markers",name=name,
+                    marker=dict(symbol="triangle-up",size=13,color=color,line=dict(color="#0f1620",width=1)),
+                    hovertemplate=name+"<extra></extra>"),row=1,col=1)
+    if interval=="1d":
+        for price,label,color in levels:
+            if price and math.isfinite(price):
+                fig.add_hline(y=price,line=dict(color=color,width=1.2,dash="dash"),annotation_text=label,annotation_position="top left",
+                              annotation_font=dict(color=color,size=13),row=1,col=1)
     # 下一根新增時會移出的第 -N 根：均價取收盤價，均量取成交量。
     for row, periods, column, prefix in [(1,(3,10,21,52),"Close","MA"),(2,(5,13,34),"Volume","VMA")]:
         for i,(n,color) in enumerate(zip(periods,colors)):
@@ -1661,7 +1676,7 @@ def quote_label19(quote,mode,now=None):
 
 
 @st.fragment(run_every='30s')
-def render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_period=10,show_head=True):
+def render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_period=10,show_head=True,marks=(),levels=()):
     ticker=ticker or f"{code}.TW"
     mode=st.session_state.get('scan_mode16','全市場收盤')
     quote_error=None;now=pd.Timestamp(taipei_now())
@@ -1699,7 +1714,7 @@ def render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_p
     if "分" in tf:state+=f"｜K線截至 {frame.index[-1]:%m/%d %H:%M}"
     if quote_error:state+="｜更新未完成，保留原成交時間"
     st.markdown(f'<div class="strip {"ok" if ok else "bad"}"><span>{escape(state)}</span><span>取得 {escape(stamp.split(" ")[-1])}</span></div>',unsafe_allow_html=True)
-    content=chart_html(frame,ticker,options[tf],max(180,chart_space-190))
+    content=chart_html(frame,ticker,options[tf],max(180,chart_space-190),tuple(marks),tuple(levels))
     event=interactive_chart_component()(html=content,height=chart_space,key='chart11_'+ticker,default=None)
     if event and event.get('event')!=st.session_state.get('last_chart_event11'):
         st.session_state.last_chart_event11=event['event']
@@ -1967,13 +1982,20 @@ def _dashboard(width,height):
     sig_row=None;sig_stamp="—"
     with left:
         strategy=module=="量價訊號"
-        section("","前十強板塊" if strategy else "板塊相對強弱",f"{periods}日 RS · "+("各取前五強股票／股期" if strategy else "全部板塊"),cls="lead")
+        if strategy:
+            with st.container(key="pick_head"):head_l,head_r=st.columns([1.25,1],gap="small",vertical_alignment="center")
+            with head_r:
+                focus=st.segmented_control("族群範圍",["偏好族群","全部族群"],default="偏好族群",key="sig_focus",label_visibility="collapsed",
+                                           help="偏好族群＝電子、重電、綠能（老師的選股範圍；v3 回測只做這些）") or "偏好族群"
+            with head_l:section("","前十強板塊",f"{periods}日 RS · 前五強",cls="lead")
+        else:section("","板塊相對強弱",f"{periods}日 RS · 全部板塊",cls="lead")
         if sectors.empty:
             st.info("首次載入中，完成後自動顯示排名。" if st.session_state.get("scan_jobs18",{}).get("active") and not quotes else "尚無可比較板塊：報價、歷史資料或板塊覆蓋率尚未達標。")
             if missing:st.warning(str(missing[0]))
             if mode in ("全市場盤中快照","券商即時報價檔"):st.caption("盤中來源失敗不改用昨收；盤後改讀正式收盤資料。尚無成功結果時，請確認來源或稍後更新。")
         elif strategy:
-            top,picks=strongest_picks(sectors,groups,catalog,quotes,periods,n_sec=10,n=5)
+            pool=sectors[sectors["族群板塊"].isin(xiao_panel.xs.PREFERRED)] if focus=="偏好族群" else sectors
+            top,picks=strongest_picks(pool,groups,catalog,quotes,periods,n_sec=10,n=5)
             states={}
             if not picks.empty:
                 srs=dict(zip(top["族群板塊"],top["動能(%)"]))
@@ -1986,7 +2008,7 @@ def _dashboard(width,height):
             count=lambda s,k:int(sum(1 for c in set(picks.loc[picks["_sector"]==s,"代號"]) if (states.get(c) or {}).get("state")==k)) if not picks.empty else 0
             sec_tbl=top[["趨勢","族群板塊","動能(%)","漲幅(%)","資料日"]].copy()
             sec_tbl["入選"]=[int((picks["_sector"]==s).sum()) if not picks.empty else 0 for s in sec_tbl["族群板塊"]]
-            sec_tbl["訊號"]=[count(s,"signal") for s in sec_tbl["族群板塊"]]
+            sec_tbl["訊號"]=[count(s,"signal3")+count(s,"signal") for s in sec_tbl["族群板塊"]]
             sec_tbl["整理"]=[count(s,"setup") for s in sec_tbl["族群板塊"]]
             selected=ranking_grid(sec_tbl.reset_index(drop=True),f"sig_sectors_{mode}_{periods}",rank_height,"族群板塊")
             section("","前五強股票 ／ 股期",f"{selected} · 強於族群 · 股價≥50 · 成交值≥2億")
@@ -2025,7 +2047,11 @@ def _dashboard(width,height):
                 if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
                 else:st.markdown(f'<div class="stock-head"><h2>{escape(name)}</h2><span class="stock-code">{escape(code)}</span></div>',unsafe_allow_html=True)
                 xiao_panel.render_status(sig_row,sig_stamp)
-                render_chart(code,rs,chart_space-(0 if mobile else 92),quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=False)
+                marks=(sig_row or {}).get("marks",())
+                stop=(sig_row or {}).get("stop")
+                levels=(((float(stop),"停損 "+f"{stop:,.2f}","#ff8a8a"),) if sig_row and sig_row.get("state") in ("signal3","signal","setup") and stop==stop else ())
+                render_chart(code,rs,chart_space-(0 if mobile else 92),quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,
+                             rs_period=periods,show_head=False,marks=marks,levels=levels)
             elif panel=="K線量能":
                 if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
                 render_chart(code,rs,chart_space,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD or mobile)
@@ -2087,6 +2113,9 @@ LAYOUT_CSS="""<style>
 .section{align-items:center!important}
 .note-line{height:22px!important;line-height:22px!important;font-size:12px!important;color:#7f8ea3!important;border-top:1px solid #1d2733;margin-top:2px;padding-top:2px}
 @media(max-width:1000px){.metric-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+.st-key-pick_head [data-testid="stButtonGroup"]{justify-content:flex-end}
+.st-key-pick_head [data-testid="stButtonGroup"] button{height:34px!important;min-height:34px!important;padding:0 12px!important}
+.st-key-pick_head [data-testid="stButtonGroup"] button p{font-size:15px!important}
 .brand-title{white-space:nowrap}
 @media(max-width:1480px){.brand-title{font-size:24px!important}.st-key-module_nav [data-testid="stButtonGroup"] button{padding:0 10px!important}}
 .st-key-module_nav [data-testid="stButtonGroup"]{justify-content:flex-end}

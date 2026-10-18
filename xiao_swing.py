@@ -73,6 +73,100 @@ def add_features(x, sector_rs, sector_rank, idx_close):
     return x
 
 
+def add_v3(x, idx_close):
+    """v3 規則需要的欄位（2024 公益班等影片）。"""
+    x["vma34"] = x.v.rolling(34).mean()
+    x["ma55"] = x.c.rolling(55).mean()
+    ic = idx_close.reindex(x.index).ffill()
+    x["chg"] = x.c.pct_change()
+    x["idx_chg"] = ic.pct_change()
+    x["beat_mkt"] = x.chg > x.idx_chg                                        # 當天強於大盤（跟大盤比）
+    x["self_strong"] = (x.c - x.l) >= 0.5 * (x.h - x.l)                      # 收在當日區間上半部（跟自己比，近似站上均價線）
+    x["wave"] = (x.vma5 > x.vma13) & (x.vma5 > x.vma5.shift(1)) & (x.vma13 > x.vma13.shift(1))   # 波段攻擊量帶出潮汐量
+    x["trend_vol"] = x.wave & (x.vma34 > x.vma34.shift(1))                  # 再帶出 34MV＝趨勢量能
+    return x
+
+
+def after_climax(x, days=5):
+    """區間極限大量之後、尚未再創新高的冷卻期（影片：極限大量後 5 天內量增也難讓 5MV 上揚，只要不見高 5MV 終究會退）。"""
+    climax = (x.v >= Q["climax"] * x.avgv) & (x.h >= x.h.rolling(20).max())
+    last = pd.Series(np.where(climax.values, np.arange(len(x)), np.nan), index=x.index).ffill()
+    hi = x.h.where(climax).ffill()
+    age = np.arange(len(x)) - last.values
+    return pd.Series((age >= 1) & (age <= days) & (x.h.values <= hi.values), index=x.index)
+
+
+def entries_wave(x, day_filter=True, trend=False, cooldown=False, gradual=False, life55=False, main_up=False):
+    """v3 進場 B：波段量啟動（5MV 帶出 13MV 的第一天），當天強於大盤與自己、不是瞬間爆量。停損＝前 3 日最低。
+    trend=True 時另外要求 34MV 上揚（趨勢量能）。
+    cooldown=True：排除區間極限大量後尚未見新高的 5 天；gradual=True：當天量不超過前 20 日均量 2.5 倍（循序漸進的量）。"""
+    start = x.wave & ~x.wave.shift(1, fill_value=False)
+    base = (start & x.liquid & (x.c > x.ma21) & x.slow_up & (x.rs10 > 0)
+            & (x.sec_rs > 0) & (x.sec_rank <= Q["top_in_sector"])
+            & (x.c > x.o) & (x.c > x.c.shift(1))
+            & (x.v <= Q["spike"] * x.vma5))
+    if day_filter:
+        base &= x.beat_mkt & x.self_strong
+    if trend:
+        base &= x.vma34 > x.vma34.shift(1)
+    if cooldown:
+        base &= ~after_climax(x)
+    if gradual:
+        base &= x.v <= Q["climax"] * x.avgv
+    if life55:                                   # 影片：55MA 是生命線，翻揚才是多頭
+        base &= x.ma55 > x.ma55.shift(1)
+    if main_up:                                  # 影片：主升段＝均線多頭排列（8>21>55 且 55 上揚）
+        base &= (x.ma8 > x.ma21) & (x.ma21 > x.ma55) & (x.ma55 > x.ma55.shift(1))
+    low3 = x.l.rolling(3).min().values
+    return [(t, low3[t]) for t in np.flatnonzero(base.values)]
+
+
+# 老師偏好的族群（影片：塑化、水泥、金融再強也不做；以電子、重電、綠能為主）。v3 回測只做這些族群。
+PREFERRED = {"半導體", "電腦及週邊設備", "光電業", "通信網路", "電子零組件", "電子通路", "資訊服務", "其他電子",
+             "電機機械", "電器電纜", "綠能環保", "數位雲端"}
+
+
+def checks_v3(x, t=-1):
+    """v3 條件逐項（面板顯示用）。"""
+    g = lambda col: bool(x[col].iat[t]) if pd.notna(x[col].iat[t]) else False
+    return {"大盤多頭": g("mkt_bull"), "流動性": g("liquid"), "站上21MA": bool(x.c.iat[t] > x.ma21.iat[t]), "21MA扣低": g("slow_up"),
+            "強於大盤": bool(x.rs10.iat[t] > 0), "族群強": bool(x.sec_rs.iat[t] > 0), "族群前三": bool(x.sec_rank.iat[t] <= Q["top_in_sector"]),
+            "5MV>13MV": bool(x.vma5.iat[t] > x.vma13.iat[t]), "13MV↑": bool(x.vma13.iat[t] > x.vma13.iat[t - 1]),
+            "34MV↑": bool(x.vma34.iat[t] > x.vma34.iat[t - 1]), "今日強於大盤": g("beat_mkt"), "收上半部": g("self_strong")}
+
+
+def today_state3(x, preferred=True):
+    """v3 今日狀態（最後一根日 K）：
+       signal3 ＝ 波段量啟動（5MV 帶出 13MV、34MV 上揚，當天強於大盤與自己）— v3 主訊號，只在偏好族群成立
+       signal  ＝ v2 凹洞量轉折
+       wave    ＝ 波段進行中（5MV、13MV 都上揚且站上 21MA）：持股續抱，未持有不追
+       setup / trend / none 同 v2
+    另回傳 warn：持股出場警示（跌破 21MA、均線扣高、大量後量縮）。"""
+    t = len(x) - 1
+    base = today_state(x)
+    info = dict(base, rule="v2" if base["state"] == "signal" else "")
+    warn = []
+    if x.c.iat[t] < x.ma21.iat[t]:
+        warn.append("跌破21MA")
+    if (not x.ma8_up.iat[t]) and (not x.ma21_up.iat[t]) and x.c.iat[t] < x.ma8.iat[t]:
+        warn.append("8/21MA 扣高")
+    if t >= 1 and x.v.iat[t - 1] >= 1.6 * x.vma5.iat[t - 2] and x.vma5.iat[t] < x.vma5.iat[t - 1] and x.h.iat[t] <= x.h.iat[t - 1]:
+        warn.append("大量後量縮不見高")
+    info["warn"] = "、".join(warn)
+    sig = dict(entries_wave(x, trend=True))
+    if t in sig and bool(x.mkt_bull.iat[t]):
+        if preferred:
+            info.update(state="signal3", rule="v3", stop=sig[t], high=x.h.iat[t], push_date=x.index[t],
+                        note="波段量啟動：5MV 帶出 13MV、34MV 上揚，當天強於大盤（收盤可買，停損＝前 3 日低點）")
+            return info
+        info["note"] = "波段量啟動，但非偏好族群（回測較弱，僅觀察）"
+    if base["state"] in ("signal", "setup"):
+        return info
+    if bool(x.wave.iat[t]) and x.c.iat[t] > x.ma21.iat[t]:
+        info.update(state="wave", note="波段進行中：5MV、13MV 上揚，持股續抱；未持有不追高，等量縮回檔")
+    return info
+
+
 # ---------------------------------------------------------------- 進場
 def _last_push(x):
     ar = np.arange(len(x))
@@ -114,21 +208,27 @@ def entries_v2(x):
 
 
 # ---------------------------------------------------------------- 出場
-def exit_path(x, e, stop, max_hold=MAX_HOLD):
-    """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。資料不夠時最後一筆為「持有中」。"""
+def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False):
+    """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。資料不夠時最後一筆為「持有中」。
+    climax_rule：'avg20'＝量 ≥ 前 20 日均量 2.5 倍（預設）；'mv5'＝量 ≥ 前一日 5MV 的 160%（影片：波段攻擊量的 160%）。
+    tide_exit：13MV（潮汐量）由升轉降的那天全部出場（影片：13MV 轉折＝絕項的項，八成是波段高點）。"""
     n = len(x)
     legs, left, climax, maxv = [], 1.0, None, x.v.iat[e]
+    v13 = x.vma13.values if tide_exit else None
     for j in range(e, min(e + max_hold, n - 1)):
         c, v = x.c.iat[j], x.v.iat[j]
         if climax is not None and left > 0.5 and v < x.v.iat[climax] and x.h.iat[j] <= x.h.iat[climax]:
             legs.append((j + 1, 0.5, "極限大量後量縮不見高（出一半）"))      # 影片10：黃燈之後不見高
             left = 0.5
-        if v >= Q["climax"] * x.avgv.iat[j] and v >= maxv:
+        big = v >= Q["climax"] * x.avgv.iat[j] if climax_rule == "avg20" else v >= 1.6 * x.vma5.iat[j - 1]
+        if big and v >= maxv:
             climax = j                                                       # 自下而上區間的極限大量
         maxv = max(maxv, v)
         reason = None
         if c < stop:
             reason = "跌破回檔低點"
+        elif tide_exit and j - 2 >= 0 and v13[j] < v13[j - 1] and v13[j - 1] >= v13[j - 2]:
+            reason = "13MV轉折（潮汐量退）"
         elif c < x.ma21.iat[j]:
             reason = "跌破21MA"
         elif (not x.ma8_up.iat[j]) and (not x.ma21_up.iat[j]) and c < x.ma8.iat[j]:
