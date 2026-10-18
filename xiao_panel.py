@@ -53,15 +53,18 @@ CSS = """<style>
 .sig-flag{font-size:12px;margin-right:3px}
 @media(max-width:1100px){.sig-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 [data-testid="stMarkdownContainer"]:has(.sx-bar){margin-bottom:0!important}
-.sx-bar{height:78px;box-sizing:border-box;padding:8px 12px;border:1px solid #293442;border-radius:10px;background:linear-gradient(115deg,#141c27,#0f151f);display:flex;flex-direction:column;justify-content:space-between}
+.sx-bar{height:84px;box-sizing:border-box;padding:8px 12px;border:1px solid #293442;border-radius:10px;background:linear-gradient(115deg,#141c27,#0f151f);display:flex;flex-direction:column;justify-content:space-between}
 .sx-top{display:flex;align-items:center;gap:12px;min-width:0}
-.sx-top .sig-badge{font-size:14px;font-weight:700;flex:none}
-.sx-note{flex:1;min-width:0;font-size:13px;color:#aebcd0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sx-num{flex:none;font-size:16px;color:#e8edf6;font-variant-numeric:tabular-nums}.sx-num i{font-style:normal;font-size:12px;color:#8494a8;margin-right:5px}
+.sx-top .sig-badge{font-size:16px;font-weight:700;flex:none}
+.sx-note{flex:1;min-width:0;font-size:15px;color:#c0ccdc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx-num{flex:none;font-size:18px;color:#eef2f8;font-variant-numeric:tabular-nums}.sx-num i{font-style:normal;font-size:14px;color:#94a3b6;margin-right:5px}
 .sx-chips{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
-.sx-chip{font-size:12px;padding:1px 7px;border-radius:9px;border:1px solid #2b3747}
-.sx-chip.ok{color:#f3a2a4;border-color:#6b3437;background:#2a1719}.sx-chip.no{color:#66778c;background:#121923}
-.sx-stamp{margin-left:auto;font-size:11px;color:#6f7f93}
+.sx-chip{font-size:14px;padding:1px 8px;border-radius:10px;border:1px solid #2b3747}
+.sx-chip.ok{color:#f6b0b2;border-color:#6b3437;background:#2a1719}.sx-chip.no{color:#7a8a9e;background:#121923}
+.sx-stamp{margin-left:auto;font-size:13px;color:#7f8fa3}
+.sig-head b{font-size:21px!important}.sig-head span{font-size:14px!important}
+.sig-card span{font-size:14px!important}.sig-card b{font-size:24px!important}
+.sig-wrap table.acct{font-size:16px!important}.sig-ev{font-size:14px!important}.sig-note{font-size:14px!important}.sig-badge{font-size:14px!important}
 </style>"""
 
 
@@ -224,6 +227,7 @@ def _checks(x, mkt_bull):
             "族群強": bool(x.sec_rs.iat[t] > 0), "族群前三": bool(x.sec_rank.iat[t] <= xs.Q["top_in_sector"])}
 
 
+@st.cache_data(ttl=300, show_spinner=False, max_entries=16)
 def scan_states(cands):
     """量價訊號模組用：對候選股（前十強板塊的前五強）即時計算 v2 狀態。回傳 ({code: row}, 取得時間)。"""
     if not cands:

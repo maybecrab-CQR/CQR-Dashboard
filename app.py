@@ -17,6 +17,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
+import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -334,10 +335,16 @@ def fetch(ticker, period, interval="1d"):
 
 
 def rs_momentum(numerator, denominator, periods=10):
-    pair=pd.concat([numerator,denominator],axis=1).dropna()
-    if len(pair)<periods+1 or (pair<=0).any().any():return None
-    ratio=pair.iloc[:,0]/pair.iloc[:,1]
-    return float(ratio.iloc[-1]/ratio.iloc[-periods-1]-1)
+    # 日期相同（絕大多數情況）直接用 numpy，比 pd.concat 對齊快約 20 倍；日期不同才對齊。
+    if numerator.index.equals(denominator.index):
+        a=numerator.to_numpy(dtype=float);b=denominator.to_numpy(dtype=float)
+        ok=~(np.isnan(a)|np.isnan(b));a=a[ok];b=b[ok]
+    else:
+        pair=pd.concat([numerator,denominator],axis=1).dropna()
+        a=pair.iloc[:,0].to_numpy(dtype=float);b=pair.iloc[:,1].to_numpy(dtype=float)
+    if len(a)<periods+1 or (a<=0).any() or (b<=0).any():return None
+    ratio=a/b
+    return float(ratio[-1]/ratio[-periods-1]-1)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -475,8 +482,19 @@ def screening_snapshot(periods=10):
 
 def leader_table(group,catalog,periods=10,rising_only=False,futures_only=False,rs_filter="全部"):
     columns=["代號","名稱","屬性","動能(%)","漲幅(%)","相對狀態","股期商品","資料日"]
-    rows=[]
     if not group:return pd.DataFrame(columns=columns)
+    # 同一次掃描結果、同樣條件只算一次（換頁籤時不用重算族群內 RS）
+    memo=st.session_state.setdefault("_leader_memo",{})
+    key=(id(group),periods,rising_only,futures_only,rs_filter,catalog is None)
+    if key in memo and memo[key][0] is group:return memo[key][1].copy()
+    table=_leader_table(group,catalog,periods,rising_only,futures_only,rs_filter,columns)
+    if len(memo)>400:memo.clear()
+    memo[key]=(group,table)
+    return table.copy()
+
+
+def _leader_table(group,catalog,periods,rising_only,futures_only,rs_filter,columns):
+    rows=[]
     for ticker,close in group["members"].items():
         value=rs_momentum(close,group["basket"].Close,periods)
         change=group.get("day_changes",{}).get(ticker,float(close.iloc[-1]/close.iloc[-2]-1)*100)
@@ -1144,8 +1162,24 @@ def chip_history_reports(market,kind,target,count=10):
     def read(day):
         try:return day,chip_report(market,kind,day),None
         except Exception as exc:return day,{},str(exc)
-    with ThreadPoolExecutor(max_workers=3) as pool:items=list(pool.map(read,days))
+    with ThreadPoolExecutor(max_workers=min(10,max(1,len(days)))) as pool:items=list(pool.map(read,days))
     return sorted(items,key=lambda item:item[0])
+
+
+_CHIP_WARM={"key":None}
+
+
+def warm_chip_reports():
+    """背景預先下載上市／上櫃的法人、資券報表（全市場共用），切到「法人／資券」頁籤時就不用等。"""
+    target=expected_session()
+    if target is None or _CHIP_WARM["key"]==(target,taipei_now().strftime("%H%M")[:3]):return
+    _CHIP_WARM["key"]=(target,taipei_now().strftime("%H%M")[:3])   # 約每 10 分鐘最多預熱一次
+    def job():
+        for market in ("上市","上櫃"):
+            for kind in ("institution","margin"):
+                try:chip_history_reports(market,kind,target,10)
+                except Exception:pass
+    threading.Thread(target=job,daemon=True,name="cqr-chip-warm").start()
 
 
 @st.cache_data(ttl=300,show_spinner=False,max_entries=256)
@@ -1292,10 +1326,10 @@ def ranking_grid(frame, key, height, chosen_column):
                 cellStyle=JsCode("function(p){return {color:p.value>0?'"+("#f17c7e" if col=="訊號" else "#efc979" if col=="整理" else "#c2cede")+"':'#5d6b7d',fontWeight:'600'};}"))
     if "狀態" in frame:
         builder.configure_column("狀態",width=120,minWidth=96,maxWidth=150,tooltipField="狀態",
-            cellStyle=JsCode("function(p){const m={'轉折訊號':'#ff9ea1','量縮整理':'#efc979','趨勢・無型態':'#a9b6c9'};return {color:m[p.value]||'#66778c',fontSize:'15px',fontWeight:p.value==='轉折訊號'?'700':'400'};}"))
+            cellStyle=JsCode("function(p){const m={'轉折訊號':'#ff9ea1','量縮整理':'#efc979','趨勢・無型態':'#a9b6c9'};return {color:m[p.value]||'#66778c',fontSize:'17px',fontWeight:p.value==='轉折訊號'?'700':'400'};}"))
     if "類別" in frame:
-        if "板塊" in frame:builder.configure_column("板塊",width=104,minWidth=88,maxWidth=150,tooltipField="板塊",cellStyle=JsCode("function(p){return {color:'#d9c58e',fontSize:'15px'};}"))
-        builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e2c47c',fontWeight:p.value==='股票'?'400':'700',fontSize:'15px'};}"))
+        if "板塊" in frame:builder.configure_column("板塊",width=104,minWidth=88,maxWidth=150,tooltipField="板塊",cellStyle=JsCode("function(p){return {color:'#d9c58e',fontSize:'17px'};}"))
+        builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e2c47c',fontWeight:p.value==='股票'?'400':'700',fontSize:'17px'};}"))
         builder.configure_column("屬性",hide=True)
     if "族群板塊" in frame:
         builder.configure_column("族群板塊", width=140, minWidth=114,maxWidth=190,tooltipField="族群板塊")
@@ -1306,13 +1340,24 @@ def ranking_grid(frame, key, height, chosen_column):
         if "類別" not in frame:builder.configure_column("屬性", width=60, minWidth=58, maxWidth=64, tooltipField="股期商品",cellStyle=JsCode("function(p){return {color:p.value==='股期'?'#e2c47c':'#8895a7',fontWeight:p.value==='股期'?'700':'400'};}"))
     battery=JsCode("""class Battery {init(p){const v=Number(p.value);this.e=document.createElement('div');this.e.style.cssText='display:flex;align-items:center;gap:6px;height:100%;font-size:12px';if(p.value==null){this.e.textContent='—';return;}this.e.title='RS '+Number(p.data['動能(%)']).toFixed(2)+'%；相對強度 '+v+'/100，50為中性，非勝率';const b=document.createElement('div');b.style.cssText='display:flex;gap:2px;border:1px solid #718095;border-radius:4px;padding:3px;flex:1;height:20px;min-width:48px';const color=v>50?'#efbd67':v<50?'#4fb7ad':'#8798ad';for(let i=0;i<10;i++){const c=document.createElement('i');c.style.cssText='flex:1;border-radius:1px;background:'+(i<Math.round(v/10)?color:'#263340');b.appendChild(c);}const n=document.createElement('span');n.style.cssText='width:23px;color:'+color;n.textContent=v;this.e.append(b,n);}getGui(){return this.e;}}""")
     builder.configure_column('Momentum',headerName='Momentum',headerTooltip='RS換算相對多方強度：0～100，50為中性；非勝率、不代表股價一定上漲',minWidth=112,width=130,flex=1,cellRenderer=battery,hide="類別" in frame or "訊號" in frame)
+    if st.session_state.get("_mobile"):
+        height=min(height,52+42*len(frame)+6)   # 筆數少時表格不留大片空白
+        # 手機：只留最重要的欄位，避免表格左右捲動
+        drop=["Momentum","覆蓋","屬性"]+(["漲幅(%)","入選","代號"] if ("訊號" in frame or "狀態" in frame) else [])
+        for col in drop:
+            if col in frame:builder.configure_column(col,hide=True)
+        builder.configure_column("動能(%)",headerName="RS%",width=78,minWidth=70,maxWidth=90,wrapHeaderText=False)
+        if "名稱" in frame:builder.configure_column("名稱",minWidth=72,flex=1)
+        if "類別" in frame:builder.configure_column("類別",width=72,minWidth=70,maxWidth=76)
+        if "狀態" in frame:builder.configure_column("狀態",width=124,minWidth=118,maxWidth=130)
     response = AgGrid(frame, gridOptions=builder.build(), height=height, theme="alpine",
         update_on=["selectionChanged"], fit_columns_on_grid_load=True, key=f"{key}_{height}",
         allow_unsafe_jscode=True, custom_css={
             ".ag-cell,.ag-header-cell": {"padding-left":"6px !important","padding-right":"6px !important"},
             ".ag-root-wrapper": {"background-color":"#0f1620 !important", "border":"1px solid #293442 !important", "border-radius":"10px !important"},
-            ".ag-header": {"background-color":"#18212d !important", "color":"#aebacb !important", "font-size":"15px !important", "border-bottom":"1px solid #2c3746 !important"},
-            ".ag-row": {"background-color":"#101721 !important", "color":"#cbd4e1 !important", "font-size":"18px !important", "border-bottom":"1px solid #1c2633 !important"},
+            ".ag-header": {"background-color":"#18212d !important", "color":"#c3cedc !important", "font-size":"16px !important", "border-bottom":"1px solid #2c3746 !important"},
+            ".ag-header-cell-text": {"font-weight":"600 !important"},
+            ".ag-row": {"background-color":"#101721 !important", "color":"#dbe2ec !important", "font-size":"19px !important", "border-bottom":"1px solid #1c2633 !important"},
             ".ag-row-odd": {"background-color":"#121b26 !important"},
             ".ag-row-hover": {"background-color":"#202b37 !important"},
             ".ag-row-selected": {"background-color":"#2a2b24 !important", "border-left":"3px solid #cfb679 !important"},
@@ -1360,8 +1405,8 @@ def chart_html(frame, ticker, interval, height=600):
                     text=f"{prefix}{n}",font=dict(size=13,color=color),showarrow=True,
                     arrowcolor=color,arrowhead=2,arrowwidth=1,ax=-18 if i==0 else 18,ay=-22,
                     bgcolor="#101721",borderpad=3)
-    fig.update_yaxes(nticks=5,tickfont=dict(size=15),row=1,col=1)
-    fig.update_yaxes(nticks=3,tickfont=dict(size=14),row=2,col=1)
+    fig.update_yaxes(nticks=5,tickfont=dict(size=16),row=1,col=1)
+    fig.update_yaxes(nticks=3,tickfont=dict(size=15),row=2,col=1)
     fig.update_layout(template="plotly_dark",paper_bgcolor="#0f1620",plot_bgcolor="#0f1620",
         height=height,margin=dict(l=14,r=96,t=36,b=36),dragmode="pan",hovermode=False,
         hoverlabel=dict(bgcolor="#1b2532",font_size=12),font=dict(family="Segoe UI, Microsoft JhengHei, sans-serif",size=16,color="#bdc9da"),
@@ -1389,6 +1434,8 @@ CHART_TEMPLATE = r'''<!doctype html><html lang="zh-Hant"><head><meta charset="ut
 body{font-size:14px}.bar-date{padding-top:6px!important}.ohlc{padding-top:3px!important;padding-bottom:6px!important}.ohlc b{font-size:18px!important}#ma-values{padding-bottom:2px!important}.label,.hint{font-size:12px;color:#b2bed0}.toolbar{gap:3px;padding:9px}.toolbar button{padding:7px}.ohlc{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:7px 14px 12px}.ohlc span{display:block;font:12px "Microsoft JhengHei",sans-serif;color:#a9b6c9}.ohlc b{display:block;font:600 19px "Segoe UI",sans-serif;color:#eff3fa;font-variant-numeric:tabular-nums}.bar-date{padding:12px 14px 0;font-size:13px;color:#dcc58c}#ma-values{padding:0 14px 8px;color:#c7b88f;font-size:13px}.chart-wrap{position:relative}.cross,.axis-tag{position:absolute;pointer-events:none;display:none;z-index:20}.vertical{border-left:1px dashed #e5cf9b}.horizontal{border-top:1px dashed #c4b58f;opacity:.7}.axis-tag{background:#e3cb94;color:#101721;border-radius:3px;padding:3px 5px;font:600 12px monospace;white-space:nowrap}.time-tag{font-size:12px}.shell:fullscreen .chart-wrap{flex:1;min-height:0}
 body{font-size:16px}.toolbar{flex-wrap:wrap;gap:3px;padding:6px}.toolbar button{padding:5px}.ohlc b{font-size:21px!important}.ohlc span{font-size:14px}.bar-date,#ma-values{font-size:14px}.ohlc>div{min-width:0}.ohlc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.axis-tag{font-size:14px}.hint{font-size:12px}
 #deduct-values{padding:0 14px 4px;font-size:13px;line-height:20px}#deduct-values .deduct-row{display:flex;flex-wrap:wrap;gap:4px 12px;white-space:nowrap}#deduct-values .deduct-title{color:#b7c5d6;min-width:108px}#deduct-values .deduct-item{font-variant-numeric:tabular-nums}#deduct-values b{font-size:14px}
+body{font-size:17px}.label,.hint{font-size:14px!important;color:#b9c5d6}.toolbar button,#timeframe{font-size:16px}.ohlc span{font-size:15px!important}.ohlc b{font-size:23px!important}.bar-date,#ma-values{font-size:15px!important}#deduct-values{font-size:15px;line-height:23px}#deduct-values .deduct-title{min-width:122px}#deduct-values b{font-size:16px}
+@media(max-width:600px){body{font-size:15px}.toolbar button,#timeframe{font-size:14px;padding:5px 6px}.ohlc b{font-size:17px!important}.ohlc span{font-size:13px!important}#deduct-values{font-size:13px;line-height:20px}#deduct-values b{font-size:14px}.hint{display:none}#chart .legend{display:none}#ma-values{font-size:13px!important}}
 @media(max-width:600px){.ohlc b{font-size:16px}.ohlc{gap:5px}.toolbar button{font-size:12px}}
 </style><script>__PLOTLY__</script></head><body><div class="shell" id="shell">
 <div class="toolbar"><span class="label">視野</span><button data-bars="30">30 根</button><button data-bars="60">60 根</button><button data-bars="120">120 根</button><button data-bars="all">全部</button><span class="sep"></span><button id="auto" class="active" title="可視 K 棒與均線自動適配價格及成交量軸">自動 Y 軸</button><button id="deduct" class="active" title="標示以最新 K 棒為準、下一根將移出的均價／均量資料">扣抵標示</button><select id="timeframe" aria-label="K線週期" title="切換K線週期"><option value="日K">日K</option><option value="周K">周K</option><option value="月K">月K</option><option value="1分">1分</option><option value="15分">15分</option><option value="30分">30分</option><option value="60分">60分</option></select><span class="spacer"></span><button id="latest" class="active">回到最新</button><button id="reset">重設</button><button id="full">全螢幕</button></div>
@@ -1743,46 +1790,72 @@ def render_splash():
 
 @st.fragment(run_every="300s")
 def dashboard(width,height):
+    if os.environ.get("CQR_TIMING"):           # 只量時間：設定 CQR_TIMING=輸出檔
+        t0=clock.perf_counter()
+        try:return _dashboard(width,height)
+        finally:
+            with open(os.environ["CQR_TIMING"],"a",encoding="utf-8") as fh:
+                fh.write(f"{st.session_state.get('module')}\t{st.session_state.get('view11')}\t{st.session_state.get('sig_view')}\t{(clock.perf_counter()-t0)*1000:.0f}\n")
+    if not os.environ.get("CQR_PROFILE"):return _dashboard(width,height)
+    import cProfile                      # 效能分析：設定環境變數 CQR_PROFILE=輸出資料夾 才會啟用
+    prof=cProfile.Profile();t0=clock.perf_counter();prof.enable()
+    try:return _dashboard(width,height)
+    finally:
+        prof.disable()
+        out=Path(os.environ["CQR_PROFILE"]);out.mkdir(parents=True,exist_ok=True)
+        prof.dump_stats(out/f"run_{clock.time():.0f}_{(clock.perf_counter()-t0)*1000:.0f}ms.prof")
+
+
+def _dashboard(width,height):
     # 載入畫面要在畫任何東西之前就出現：用佔位元件先送出，掃描完成後再移除。
     splash_ph=st.empty()
     if not st.session_state.get('cqr_first_done') and not st.session_state.get('cqr_skip_splash'):
         st.session_state['cqr_splash_on']=True
         with splash_ph.container():render_splash()
     desktop=width>=1000
+    mobile=width<700
+    st.session_state["_mobile"]=mobile
     workspace=max(420,height-200) if desktop else 760
     chart_space=max(240,workspace-178)
     rank_height=max(126,int((workspace-138)/2))
-    title,rest=st.columns([.40,.60],gap="medium",vertical_alignment="center")
-    if IS_CLOUD:
-        with rest:view,refresh,details=st.columns([4.5,1.35,1.75],gap="small",vertical_alignment="center")
-        login=None
+    if mobile:  # 手機：上下堆疊，表格固定高度、K 線吃滿一個螢幕
+        rank_height=min(330,max(260,int(height*.42)));chart_space=max(460,int(height*.78))
+    if mobile:
+        # 手機：第一列 品牌＋更新＋設定；第二列 策略模組；第三列 頁籤（下單與登入只在電腦版）
+        with st.container(key="m_head"):
+            brand_col,refresh,details=st.columns([5,1,1],gap="small",vertical_alignment="center")
+        nav_col=st.container(key="m_nav");view=st.container(key="m_view");login=None
     else:
-        with rest:view,login,refresh,details=st.columns([4.0,1.35,1.2,1.5],gap="small",vertical_alignment="center")
-    with title:
-        brand_col,nav_col=st.columns([1.4,1],gap="small",vertical_alignment="center")
-        with brand_col:st.markdown('<div class="brand"><div class="brand-left"><div class="monogram">C</div><div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
-        with nav_col,st.container(key="module_nav"):
-            # 策略模組：之後新增的模組加在這個清單即可
-            module=st.segmented_control("策略模組",MODULES,default=MODULES[0],key="module",label_visibility="collapsed") or MODULES[0]
+        title,rest=st.columns([.40,.60],gap="medium",vertical_alignment="center")
+        if IS_CLOUD:
+            with rest:view,refresh,details=st.columns([4.5,1.35,1.75],gap="small",vertical_alignment="center")
+            login=None
+        else:
+            with rest:view,login,refresh,details=st.columns([4.0,1.35,1.2,1.5],gap="small",vertical_alignment="center")
+        with title:brand_col,nav_col=st.columns([1.4,1],gap="small",vertical_alignment="center")
+    with brand_col:st.markdown('<div class="brand"><div class="brand-left"><div class="monogram">C</div><div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
+    with nav_col,st.container(key="module_nav"):
+        # 策略模組：之後新增的模組加在這個清單即可
+        module=st.segmented_control("策略模組",MODULES,default=MODULES[0],key="module",label_visibility="collapsed") or MODULES[0]
     if login is not None:
         with login:huanan_panel.login_control()
     with view:
         if module=="主面板":
-            tabs=["K線量能","法人","資券"] if IS_CLOUD else ["K線量能","法人","資券","帳務資訊"]
+            tabs=["K線量能","法人","資券"] if IS_CLOUD or mobile else ["K線量能","法人","資券","帳務資訊"]
             if st.session_state.get("view11") not in [None]+tabs:st.session_state["view11"]="K線量能"
             panel=st.segmented_control("個股資訊",tabs,default="K線量能",key="view11",label_visibility="collapsed") or "K線量能"
         else:
             panel=st.segmented_control("模組頁面",["板塊選股","前瞻紀錄"],default="板塊選股",key="sig_view",label_visibility="collapsed") or "板塊選股"
     force_refresh=False
     with refresh:
-        if st.button("↻ 全部更新",use_container_width=True):
+        if st.button("↻" if mobile else "↻ 全部更新" if width>=1500 else "↻ 更新",use_container_width=True,help="全部更新"):
             if st.session_state.get('scan_jobs18',{}).get('active'):
                 st.toast('已有更新進行中，完成後會顯示結果。')
             else:
                 force_refresh=True
                 for fn in (chart_history,stock_chip_history,chip_history_reports,chip_report,selected_quote19):fn.clear()
     with details:
-        with st.popover("掃描設定／說明",use_container_width=True):
+        with st.popover("⚙" if mobile else "掃描設定／說明" if width>=1640 else "⚙ 設定",use_container_width=True,help="掃描設定／說明"):
             mode="Yahoo 延遲盤中掃描";st.session_state.scan_mode16=mode
             periods=st.selectbox("相對強弱比較期（交易日）",[5,10,20],index=1,key="period9",help="所有模式皆可選 5／10／20 個交易日。RS 依此期間計算；當日漲幅只看資料日期當天。盤中以目前有效報價作為比較終點。")
             rs_filter=st.selectbox("族群內個股範圍",["全部","只看 RS > 0","只看 RS ≤ 0"],key="rs_scope7",help="全部：保留所有有效成分。RS > 0：跑贏所屬族群。RS ≤ 0：與族群同步或落後族群；不一定是股價下跌。")
@@ -1883,9 +1956,12 @@ def dashboard(width,height):
     cards=[("加權指數 · "+escape(asof),price_text,""),("進入板塊排名 / 全市場",rank_text,"gold"),
            ("強勢 / 有效 / 全產業",sector_text,""),(escape(effective_label)+" · 排名覆蓋",ratio,"")]
     kpi_html=lambda items:'<div class="metric-row">'+"".join(f'<div class="metric"><div class="metric-label">{label}</div><div class="metric-value {cls}">{value}</div></div>' for label,value,cls in items)+'</div>'
-    kpi_left,kpi_right=st.columns([.40,.60],gap="medium")
-    with kpi_left:st.markdown(kpi_html(cards[:2]),unsafe_allow_html=True)
-    with kpi_right:st.markdown(kpi_html(cards[2:]),unsafe_allow_html=True)
+    if mobile:st.markdown(kpi_html(cards),unsafe_allow_html=True)   # 手機：2×2
+    else:
+        kpi_left,kpi_right=st.columns([.40,.60],gap="medium")
+        with kpi_left:st.markdown(kpi_html(cards[:2]),unsafe_allow_html=True)
+        with kpi_right:st.markdown(kpi_html(cards[2:]),unsafe_allow_html=True)
+    warm_chip_reports()
     left,right=st.columns([.40,.60],gap="medium")
     code=None;rs=None;selected=None
     sig_row=None;sig_stamp="—"
@@ -1942,14 +2018,17 @@ def dashboard(width,height):
             if panel=="帳務資訊":
                 huanan_panel.render_account(workspace)
             elif panel=="前瞻紀錄":
-                xiao_panel.render_v2(signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace)
+                # 有排程掃描檔就直接讀；沒有（例如雲端）才即時算候選股
+                has_scan=(xiao_panel.LOG_DIR/"latest_scan.csv").exists()
+                xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace)
             elif panel=="板塊選股":
-                if not IS_CLOUD:huanan_panel.render_ticket(code,name)
+                if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
+                else:st.markdown(f'<div class="stock-head"><h2>{escape(name)}</h2><span class="stock-code">{escape(code)}</span></div>',unsafe_allow_html=True)
                 xiao_panel.render_status(sig_row,sig_stamp)
-                render_chart(code,rs,chart_space-86,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD)
+                render_chart(code,rs,chart_space-(0 if mobile else 92),quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=False)
             elif panel=="K線量能":
-                if not IS_CLOUD:huanan_panel.render_ticket(code,name)
-                render_chart(code,rs,chart_space,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD)
+                if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
+                render_chart(code,rs,chart_space,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD or mobile)
             else:
                 render_chip_trends(code,name,row.iloc[0].ticker if len(row) else code+'.TW',market,'institution' if panel=='法人' else 'margin',quotes.get(code),workspace-12)
 
@@ -2015,6 +2094,55 @@ LAYOUT_CSS="""<style>
 .st-key-module_nav [data-testid="stButtonGroup"] button p{font-size:15px!important;font-weight:650!important;letter-spacing:1px}
 .st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"],.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"]{background:linear-gradient(180deg,#d7bf84,#b99a58)!important;border-color:#d7bf84!important}
 .st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"] p,.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"] p{color:#15110a!important}
+/* ---- 字級：全面放大小字（最小 14px），維持既有版面高度 ---- */
+.eyebrow{font-size:12px!important}
+.metric-label{font-size:15px!important;color:#a9b6c8!important}
+.metric-value{font-size:28px!important}
+.section-title{font-size:21px!important}
+.section-note{font-size:15px!important;color:#9aa8bb!important}
+.note-line{font-size:14px!important;color:#93a2b6!important}
+.price-details{font-size:17px!important;color:#b3c0d1!important}
+.strip{font-size:15px!important}
+.stock-code{font-size:16px!important}
+[data-testid="stHorizontalBlock"]:has(.brand) [data-testid="stButtonGroup"] button p,.st-key-m_view [data-testid="stButtonGroup"] button p{font-size:17px!important}
+[data-testid="stHorizontalBlock"]:has(.brand) [data-testid="stButton"] button p,[data-testid="stHorizontalBlock"]:has(.brand) [data-testid="stPopover"] button p{font-size:17px!important}
+.st-key-module_nav [data-testid="stButtonGroup"] button p{font-size:17px!important}
+[data-testid="stCaptionContainer"] p,[data-testid="stMarkdownContainer"] p,[data-testid="stMarkdownContainer"] li{font-size:16px}
+/* ---- 手機版（< 700px）---- */
+@media(max-width:700px){
+.block-container{padding:10px 12px 16px!important}
+.st-key-m_head [data-testid="stHorizontalBlock"]{flex-wrap:nowrap!important;gap:8px!important}
+.st-key-m_head [data-testid="stColumn"]{min-width:0!important;width:auto!important;flex:1 1 0!important}
+.st-key-m_head [data-testid="stColumn"]:first-child{flex:5 1 0!important}
+.st-key-m_head .stElementContainer:has(.brand),.st-key-m_head .brand{height:48px!important;min-height:48px!important}
+.st-key-m_head .monogram{width:38px;height:38px;font-size:21px}
+.st-key-m_head .eyebrow{font-size:10px!important;letter-spacing:2px}
+.st-key-m_head .brand-title{font-size:21px!important}
+.st-key-m_head [data-testid="stButton"] button,.st-key-m_head [data-testid="stPopover"] button{height:44px!important;min-height:44px!important;padding:0!important}
+.st-key-m_head [data-testid="stButton"] button p,.st-key-m_head [data-testid="stPopover"] button p{font-size:20px!important}
+.st-key-m_nav .stElementContainer,.st-key-m_view .stElementContainer{width:100%!important;max-width:none!important}
+.st-key-m_nav [data-testid="stButtonGroup"],.st-key-m_view [data-testid="stButtonGroup"]{display:block!important;width:100%!important;max-width:none!important}
+.st-key-m_nav [role="radiogroup"],.st-key-m_view [role="radiogroup"]{display:flex!important;width:100%!important;max-width:none!important;min-width:100%!important;flex-wrap:nowrap!important}
+.stElementContainer:has(.price-line){height:auto!important;min-height:0!important;overflow:visible!important}
+[data-testid="stMarkdownContainer"]:has(.price-line){margin-bottom:0!important}
+.price-line{flex-wrap:wrap!important;row-gap:0!important}.price-details{flex-basis:100%}
+.st-key-m_nav [data-testid="stButtonGroup"] button,.st-key-m_view [data-testid="stButtonGroup"] button{flex:1 1 0!important;min-width:0!important;height:44px!important;min-height:44px!important;padding:0 6px!important}
+.st-key-module_nav [data-testid="stButtonGroup"]{justify-content:stretch!important}
+.metric-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+.metric{height:68px!important;padding:8px 12px!important}
+.metric-label{font-size:13px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.metric-value{font-size:22px!important}
+.section.lead,.stElementContainer:has(.section.lead){height:40px!important;min-height:40px!important}
+.section-title{font-size:19px!important}.section-note{font-size:13px!important}
+.stock-head h2{font-size:26px!important}.last-price{font-size:36px!important}.price-details{font-size:14px!important}
+.strip{font-size:13px!important}
+.note-line{height:auto!important;line-height:1.4!important;white-space:normal!important}
+.stElementContainer:has(.note-line){height:auto!important}
+.sx-bar{height:auto!important;gap:6px}.sx-top{flex-wrap:wrap}.sx-note{flex-basis:100%;order:3;white-space:normal}.sx-chips{flex-wrap:wrap}
+.sig-cards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.sig-wrap{max-height:none!important}
+.chip-grid,.acct-cards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
 </style>"""
 
 

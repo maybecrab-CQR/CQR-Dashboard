@@ -2,6 +2,7 @@
 橋接程式 huanan_bridge.py 會在登入時由這裡自動啟動（--serve-only），網頁結束時一併結束。
 """
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -65,6 +66,7 @@ def _get(path, timeout=3, **params):
 
 
 def _post(path, payload, timeout=30):
+    _STATUS["t"] = 0.0  # 登入／登出／下單後重新查狀態
     try:
         r = requests.post(BRIDGE + path, json=payload, timeout=timeout, headers={"X-CQR-Confirm": "1"})
         r.raise_for_status()
@@ -73,8 +75,27 @@ def _post(path, payload, timeout=30):
         return {"ok": False, "message": f"橋接程式無回應：{exc}"}
 
 
-def status():
-    return _get("/status", timeout=1.5)
+_STATUS = {"t": 0.0, "v": None}
+
+
+def _bridge_up(timeout=0.15):
+    """先用 socket 快速探測連接埠：橋接程式沒開時，Windows 對 localhost 的拒絕連線要重試約 1～2 秒，會拖慢每次換頁。"""
+    u = urlparse(BRIDGE)
+    try:
+        with socket.create_connection((u.hostname, u.port or 80), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def status(fresh=False):
+    """橋接程式狀態；2 秒內重複查詢直接用上次結果（同一次畫面會查好幾次）。"""
+    now = time.monotonic()
+    if not fresh and now - _STATUS["t"] < 2.0:
+        return _STATUS["v"]
+    value = _get("/status", timeout=1.5) if _bridge_up() else None
+    _STATUS.update(t=now, v=value)
+    return value
 
 
 def is_logged_in(info=None):
@@ -91,7 +112,7 @@ def _start_bridge(live):
     subprocess.Popen(command, cwd=str(HERE), stdout=log, stderr=log, stdin=subprocess.DEVNULL, creationflags=0x08000000)  # CREATE_NO_WINDOW
     for _ in range(60):  # 載入 .NET 元件，最多等 15 秒
         time.sleep(0.25)
-        if status() is not None:
+        if status(fresh=True) is not None:
             return True
     return False
 
@@ -115,7 +136,7 @@ def _num(value, default=None):
 # ---------- 登入彈窗與頁首按鈕 ----------
 @st.dialog("券商登入")
 def login_dialog():
-    info = status()
+    info = status(fresh=True)
     if is_logged_in(info):
         st.success(f"已登入華南永昌 · {info['user']}")
         st.caption(f"{'LIVE 正式下單' if info['live'] else 'PAPER 紙上模式'} · 主機 {info['server']}")
@@ -142,7 +163,7 @@ def login_dialog():
     except Exception:
         pass
     with st.spinner("登入中…（華南限制每 5 秒登入 1 次）"):
-        running = status()
+        running = status(fresh=True)
         if running is not None and bool(running.get("live")) != live:
             _post("/logout", {"exit": True})  # 模式不同：重啟橋接程式
             time.sleep(1.2)
@@ -183,8 +204,15 @@ def _short(number):
     return "—" if number is None else _fmt(number)
 
 
-@st.fragment(run_every="3s")
 def render_ticket(code, name):
+    """已登入：每 3 秒更新報價；未登入：不自動重跑（否則網頁一直在執行，換頁要排隊）。"""
+    if is_logged_in(status()):
+        _ticket_live(code, name)
+    else:
+        _ticket_idle(code, name)
+
+
+def _ticket(code, name):
     info = status()
     logged = is_logged_in(info)
     products = []
@@ -223,6 +251,10 @@ def render_ticket(code, name):
     side = st.session_state.get("hn_ticket")
     if side and product and logged:
         _ticket_panel(side, product, info, bid, ask)
+
+
+_ticket_live = st.fragment(run_every="3s")(_ticket)
+_ticket_idle = st.fragment(_ticket)
 
 
 def _ticket_panel(side, product, info, bid, ask):
