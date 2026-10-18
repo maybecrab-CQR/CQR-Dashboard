@@ -21,11 +21,13 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 import huanan_panel
+import xiao_panel
 import hmac
 import os
 
 # 雲端模式：非 Windows 主機（Streamlit Cloud 等）沒有華南元件與憑證，自動關閉登入／下單／帳務；CQR_CLOUD=1/0 可強制開關。
 IS_CLOUD=os.environ.get('CQR_CLOUD')=='1' or (os.environ.get('CQR_CLOUD')!='0' and os.name!='nt')
+MODULES=["主面板","量價訊號"]  # 頂部策略模組；新增模組時加在這裡，並在 dashboard() 補上該模組的左右欄內容
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -488,6 +490,28 @@ def leader_table(group,catalog,periods=10,rising_only=False,futures_only=False,r
                      "動能(%)":value*100,"漲幅(%)":change,"相對狀態":state,"股期商品":catalog.get(code,"") if catalog is not None else "待核對",
                      "資料日":str(close.index[-1].date())})
     return pd.DataFrame(rows,columns=columns).sort_values("動能(%)",ascending=False).reset_index(drop=True)
+
+
+def strongest_picks(sectors,groups,catalog,quotes,periods=10,n_sec=3,n=3,min_price=50,min_value=2e8):
+    """蕭氏選股：先取相對大盤最強的前三個板塊（RS>0），再在每個板塊內取強於族群（RS>0）、
+    可交易（股價 ≥ 50、今日成交值 ≥ 2 億）的前三強股票，以及其中有股票期貨的前三強。"""
+    columns=["板塊","類別","代號","名稱","屬性","動能(%)","漲幅(%)","股期商品","相對狀態","資料日","_sector","_ticker"]
+    top=sectors[sectors["動能(%)"]>0].head(n_sec) if not sectors.empty else sectors
+    rows=[]
+    for rank,sname in enumerate(top["族群板塊"],1):
+        table=leader_table(groups.get(sname),catalog,periods,rs_filter="只看 RS > 0")
+        if table.empty:continue
+        tickers={t.split(".")[0]:t for t in groups[sname]["members"]}
+        table=table.assign(_sector=sname,_ticker=table["代號"].map(tickers))
+        def tradable(code):
+            q=quotes.get(code) or {};price=q.get("price") or 0
+            return price>=min_price and price*(q.get("Volume") or 0)>=min_value
+        table=table[table["代號"].map(tradable)]
+        stock_top=set(table.head(n)["代號"]);fut_top=set(table[table["屬性"]=="股期"].head(n)["代號"])
+        for r in table[table["代號"].isin(stock_top|fut_top)].to_dict("records"):   # 同時入選者只列一次
+            kind="股＋期" if r["代號"] in stock_top and r["代號"] in fut_top else "股票" if r["代號"] in stock_top else "股期"
+            rows.append({"板塊":f"{rank} {sname}","類別":kind,**r})
+    return top,pd.DataFrame(rows,columns=columns)
 
 
 # 全市場：官方普通股名單；即時來源與收盤來源嚴格分開。
@@ -1260,15 +1284,28 @@ def ranking_grid(frame, key, height, chosen_column):
     builder.configure_column("動能(%)", headerName="相較大盤動能%" if "族群板塊" in frame else "相較族群動能%",headerTooltip="依所選 5／10／20 個交易日計算 RS；正值跑贏，負值落後",width=112, minWidth=92, maxWidth=140,wrapHeaderText=True, type=["numericColumn"],
         valueFormatter=JsCode("function(p){return (p.value>0?'+':'')+Number(p.value).toFixed(2);}"),
         cellStyle=JsCode("function(p){return {color:p.value>0?'#f17c7e':'#55c8a4',fontWeight:'600',fontVariantNumeric:'tabular-nums'};}"))
+    for hidden in ("_sector","_ticker"):
+        if hidden in frame:builder.configure_column(hidden,hide=True)
+    if "訊號" in frame:
+        for col in ("訊號","整理","入選"):
+            builder.configure_column(col,width=58,minWidth=52,maxWidth=66,type=["numericColumn"],
+                cellStyle=JsCode("function(p){return {color:p.value>0?'"+("#f17c7e" if col=="訊號" else "#efc979" if col=="整理" else "#c2cede")+"':'#5d6b7d',fontWeight:'600'};}"))
+    if "狀態" in frame:
+        builder.configure_column("狀態",width=120,minWidth=96,maxWidth=150,tooltipField="狀態",
+            cellStyle=JsCode("function(p){const m={'轉折訊號':'#ff9ea1','量縮整理':'#efc979','趨勢・無型態':'#a9b6c9'};return {color:m[p.value]||'#66778c',fontSize:'15px',fontWeight:p.value==='轉折訊號'?'700':'400'};}"))
+    if "類別" in frame:
+        if "板塊" in frame:builder.configure_column("板塊",width=104,minWidth=88,maxWidth=150,tooltipField="板塊",cellStyle=JsCode("function(p){return {color:'#d9c58e',fontSize:'15px'};}"))
+        builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e2c47c',fontWeight:p.value==='股票'?'400':'700',fontSize:'15px'};}"))
+        builder.configure_column("屬性",hide=True)
     if "族群板塊" in frame:
         builder.configure_column("族群板塊", width=140, minWidth=114,maxWidth=190,tooltipField="族群板塊")
     else:
         builder.configure_column("趨勢", hide=True)
         builder.configure_column("代號", width=70, minWidth=68,maxWidth=80)
         builder.configure_column("名稱", width=100, minWidth=82,maxWidth=130,tooltipField="相對狀態")
-        builder.configure_column("屬性", width=60, minWidth=58, maxWidth=64, tooltipField="股期商品",cellStyle=JsCode("function(p){return {color:p.value==='股期'?'#e2c47c':'#8895a7',fontWeight:p.value==='股期'?'700':'400'};}"))
+        if "類別" not in frame:builder.configure_column("屬性", width=60, minWidth=58, maxWidth=64, tooltipField="股期商品",cellStyle=JsCode("function(p){return {color:p.value==='股期'?'#e2c47c':'#8895a7',fontWeight:p.value==='股期'?'700':'400'};}"))
     battery=JsCode("""class Battery {init(p){const v=Number(p.value);this.e=document.createElement('div');this.e.style.cssText='display:flex;align-items:center;gap:6px;height:100%;font-size:12px';if(p.value==null){this.e.textContent='—';return;}this.e.title='RS '+Number(p.data['動能(%)']).toFixed(2)+'%；相對強度 '+v+'/100，50為中性，非勝率';const b=document.createElement('div');b.style.cssText='display:flex;gap:2px;border:1px solid #718095;border-radius:4px;padding:3px;flex:1;height:20px;min-width:48px';const color=v>50?'#efbd67':v<50?'#4fb7ad':'#8798ad';for(let i=0;i<10;i++){const c=document.createElement('i');c.style.cssText='flex:1;border-radius:1px;background:'+(i<Math.round(v/10)?color:'#263340');b.appendChild(c);}const n=document.createElement('span');n.style.cssText='width:23px;color:'+color;n.textContent=v;this.e.append(b,n);}getGui(){return this.e;}}""")
-    builder.configure_column('Momentum',headerName='Momentum',headerTooltip='RS換算相對多方強度：0～100，50為中性；非勝率、不代表股價一定上漲',minWidth=112,width=130,flex=1,cellRenderer=battery)
+    builder.configure_column('Momentum',headerName='Momentum',headerTooltip='RS換算相對多方強度：0～100，50為中性；非勝率、不代表股價一定上漲',minWidth=112,width=130,flex=1,cellRenderer=battery,hide="類別" in frame or "訊號" in frame)
     response = AgGrid(frame, gridOptions=builder.build(), height=height, theme="alpine",
         update_on=["selectionChanged"], fit_columns_on_grid_load=True, key=f"{key}_{height}",
         allow_unsafe_jscode=True, custom_css={
@@ -1509,6 +1546,28 @@ READABLE_CSS="""<style>
 </style>"""
 
 
+def signal_candidates(all_sectors,groups,quotes,periods,selected=None,limit=40):
+    """量價訊號候選：強勢族群（RS>0）內、強於族群、股價 ≥ 50、今日成交值 ≥ 2 億；依族群強弱、個股強弱排序。"""
+    cands=[]
+    if all_sectors is None or all_sectors.empty:return cands
+    strong=all_sectors[all_sectors["動能(%)"]>0]
+    for sec,srs in zip(strong["族群板塊"],strong["動能(%)"]):
+        g=groups.get(sec)
+        if not g:continue
+        for ticker,close in g["members"].items():
+            code=ticker.split(".")[0];q=quotes.get(code) or {}
+            rs=rs_momentum(close,g["basket"].Close,periods)
+            price=q.get("price");vol=q.get("Volume") or 0
+            if rs is None or not price:continue
+            entry=dict(code=code,ticker=ticker,name=stock_names.get(code,code),sector=sec,sector_rs=float(srs),stock_rs=rs*100,price=price,value=price*vol)
+            if code==selected or (price>=50 and price*vol>=2e8 and rs>0):cands.append(entry)
+    cands.sort(key=lambda c:(-c["sector_rs"],-c["stock_rs"]))
+    top=cands[:limit]
+    if selected and selected not in {c["code"] for c in top}:
+        top+= [c for c in cands if c["code"]==selected][:1]
+    return top
+
+
 @st.cache_data(ttl=30,show_spinner=False,max_entries=128)
 def selected_quote19(code,ticker,mode):
     now=pd.Timestamp(taipei_now())
@@ -1698,14 +1757,22 @@ def dashboard(width,height):
         with rest:view,refresh,details=st.columns([4.5,1.35,1.75],gap="small",vertical_alignment="center")
         login=None
     else:
-        with rest:view,login,refresh,details=st.columns([3.0,1.5,1.35,1.75],gap="small",vertical_alignment="center")
-    with title:st.markdown('<div class="brand"><div class="brand-left"><div class="monogram">C</div><div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
+        with rest:view,login,refresh,details=st.columns([4.0,1.35,1.2,1.5],gap="small",vertical_alignment="center")
+    with title:
+        brand_col,nav_col=st.columns([1.4,1],gap="small",vertical_alignment="center")
+        with brand_col:st.markdown('<div class="brand"><div class="brand-left"><div class="monogram">C</div><div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
+        with nav_col,st.container(key="module_nav"):
+            # 策略模組：之後新增的模組加在這個清單即可
+            module=st.segmented_control("策略模組",MODULES,default=MODULES[0],key="module",label_visibility="collapsed") or MODULES[0]
     if login is not None:
         with login:huanan_panel.login_control()
     with view:
-        tabs=["K線量能","法人","資券"] if IS_CLOUD else ["K線量能","法人","資券","帳務資訊"]
-        if st.session_state.get("view11") not in [None]+tabs:st.session_state["view11"]="K線量能"
-        panel=st.segmented_control("個股資訊",tabs,default="K線量能",key="view11",label_visibility="collapsed") or "K線量能"
+        if module=="主面板":
+            tabs=["K線量能","法人","資券"] if IS_CLOUD else ["K線量能","法人","資券","帳務資訊"]
+            if st.session_state.get("view11") not in [None]+tabs:st.session_state["view11"]="K線量能"
+            panel=st.segmented_control("個股資訊",tabs,default="K線量能",key="view11",label_visibility="collapsed") or "K線量能"
+        else:
+            panel=st.segmented_control("模組頁面",["板塊選股","前瞻紀錄"],default="板塊選股",key="sig_view",label_visibility="collapsed") or "板塊選股"
     force_refresh=False
     with refresh:
         if st.button("↻ 全部更新",use_container_width=True):
@@ -1821,12 +1888,39 @@ def dashboard(width,height):
     with kpi_right:st.markdown(kpi_html(cards[2:]),unsafe_allow_html=True)
     left,right=st.columns([.40,.60],gap="medium")
     code=None;rs=None;selected=None
+    sig_row=None;sig_stamp="—"
     with left:
-        section("","板塊相對強弱", f"{periods}日 RS · 全部板塊", cls="lead")
+        strategy=module=="量價訊號"
+        section("","前十強板塊" if strategy else "板塊相對強弱",f"{periods}日 RS · "+("各取前五強股票／股期" if strategy else "全部板塊"),cls="lead")
         if sectors.empty:
             st.info("首次載入中，完成後自動顯示排名。" if st.session_state.get("scan_jobs18",{}).get("active") and not quotes else "尚無可比較板塊：報價、歷史資料或板塊覆蓋率尚未達標。")
             if missing:st.warning(str(missing[0]))
             if mode in ("全市場盤中快照","券商即時報價檔"):st.caption("盤中來源失敗不改用昨收；盤後改讀正式收盤資料。尚無成功結果時，請確認來源或稍後更新。")
+        elif strategy:
+            top,picks=strongest_picks(sectors,groups,catalog,quotes,periods,n_sec=10,n=5)
+            states={}
+            if not picks.empty:
+                srs=dict(zip(top["族群板塊"],top["動能(%)"]))
+                cands=[dict(code=r["代號"],ticker=r["_ticker"],name=r["名稱"],sector=r["_sector"],sector_rs=float(srs[r["_sector"]]),stock_rs=float(r["動能(%)"]))
+                       for r in picks.drop_duplicates("代號").to_dict("records")]
+                with st.spinner("計算前十強板塊個股的日線量價狀態…"):
+                    try:states,sig_stamp=xiao_panel.scan_states(cands)
+                    except Exception as exc:missing.append(f"量價狀態暫不可用：{exc}")
+                picks["狀態"]=picks["代號"].map(lambda c:xiao_panel.state_label(states.get(c)))
+            count=lambda s,k:int(sum(1 for c in set(picks.loc[picks["_sector"]==s,"代號"]) if (states.get(c) or {}).get("state")==k)) if not picks.empty else 0
+            sec_tbl=top[["趨勢","族群板塊","動能(%)","漲幅(%)","資料日"]].copy()
+            sec_tbl["入選"]=[int((picks["_sector"]==s).sum()) if not picks.empty else 0 for s in sec_tbl["族群板塊"]]
+            sec_tbl["訊號"]=[count(s,"signal") for s in sec_tbl["族群板塊"]]
+            sec_tbl["整理"]=[count(s,"setup") for s in sec_tbl["族群板塊"]]
+            selected=ranking_grid(sec_tbl.reset_index(drop=True),f"sig_sectors_{mode}_{periods}",rank_height,"族群板塊")
+            section("","前五強股票 ／ 股期",f"{selected} · 強於族群 · 股價≥50 · 成交值≥2億")
+            sub=picks[picks["_sector"]==selected].drop(columns=["板塊"]) if not picks.empty else picks
+            if sub.empty:
+                st.info("此板塊沒有可交易的強勢個股（強於族群、股價≥50、今日成交值≥2億）。")
+            else:
+                code=ranking_grid(sub.reset_index(drop=True),f"sig_stocks_{mode}_{selected}_{periods}",rank_height,"代號")
+                rs=float(sub.loc[sub['代號']==code,'動能(%)'].iloc[0])
+                sig_row=states.get(code)
         else:
             selected=ranking_grid(sectors,f"sectors9_{mode}_{periods}",rank_height,"族群板塊")
             section("","族群成分股",selected)
@@ -1847,6 +1941,12 @@ def dashboard(width,height):
             market=row.iloc[0].market if len(row) else ("上櫃" if any(code+'.TWO' in g['members'] for g in groups.values()) else "上市")
             if panel=="帳務資訊":
                 huanan_panel.render_account(workspace)
+            elif panel=="前瞻紀錄":
+                xiao_panel.render_v2(signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace)
+            elif panel=="板塊選股":
+                if not IS_CLOUD:huanan_panel.render_ticket(code,name)
+                xiao_panel.render_status(sig_row,sig_stamp)
+                render_chart(code,rs,chart_space-86,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD)
             elif panel=="K線量能":
                 if not IS_CLOUD:huanan_panel.render_ticket(code,name)
                 render_chart(code,rs,chart_space,quote=quotes.get(code),stock_name=name,ticker=row.iloc[0].ticker if len(row) else None,rs_period=periods,show_head=IS_CLOUD)
@@ -1908,6 +2008,13 @@ LAYOUT_CSS="""<style>
 .section{align-items:center!important}
 .note-line{height:22px!important;line-height:22px!important;font-size:12px!important;color:#7f8ea3!important;border-top:1px solid #1d2733;margin-top:2px;padding-top:2px}
 @media(max-width:1000px){.metric-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+.brand-title{white-space:nowrap}
+@media(max-width:1480px){.brand-title{font-size:24px!important}.st-key-module_nav [data-testid="stButtonGroup"] button{padding:0 10px!important}}
+.st-key-module_nav [data-testid="stButtonGroup"]{justify-content:flex-end}
+.st-key-module_nav [data-testid="stButtonGroup"] button{height:40px!important;min-height:40px!important;padding:0 16px!important;border-color:#4a3f27!important}
+.st-key-module_nav [data-testid="stButtonGroup"] button p{font-size:15px!important;font-weight:650!important;letter-spacing:1px}
+.st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"],.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"]{background:linear-gradient(180deg,#d7bf84,#b99a58)!important;border-color:#d7bf84!important}
+.st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"] p,.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"] p{color:#15110a!important}
 </style>"""
 
 
@@ -1943,7 +2050,7 @@ def auth_gate():
 def main():
     st.set_page_config(page_title="CQR｜全市場動能決策臺",page_icon="◈",layout="wide",initial_sidebar_state="collapsed")
     # 各段 CSS 合併為單一 <style>：用 </style><style> 直接相接時，瀏覽器會把中間當成文字，每段的第一條規則都會被吃掉。
-    merged="".join(re.sub(r"</?style>","",block) for block in (CSS,COMPACT_CSS,READABLE_CSS,CHIP_CSS,SPLASH_CSS,huanan_panel.CSS,LAYOUT_CSS))
+    merged="".join(re.sub(r"</?style>","",block) for block in (CSS,COMPACT_CSS,READABLE_CSS,CHIP_CSS,SPLASH_CSS,huanan_panel.CSS,xiao_panel.CSS,LAYOUT_CSS))
     st.markdown(("<style>"+merged+"</style>").replace("\n\n","\n"),unsafe_allow_html=True)
     if not auth_gate():return
     with st.container(key="dimensions"):
