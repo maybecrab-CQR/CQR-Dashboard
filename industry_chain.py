@@ -47,9 +47,12 @@ def parse_chain(ic):
     name = re.sub(r"^.*>\s*", "", name)                       # 「產業價值鏈資訊平台 > 半導體產業鏈簡介」
     name = re.sub(r"(產業)?產業鏈簡介$|產業鏈簡介$", "", name).strip() or ic
     rows = []
-    for seg_id, seg_name, body in re.findall(r'<div id="companyList_([0-9A-Z]+)" title="([^"]*)"[^>]*>(.*?)</table>', html, re.S):
-        for code in re.findall(r"stk_code=(\d{4})\b", body):
-            rows.append({"chain_id": ic, "chain": name, "seg_id": seg_id, "segment": unescape(seg_name).strip(), "code": code})
+    # 細項區塊一直讀到下一個細項開頭：有子分類的細項（例 IC 設計底下 15 個子類）每個子類各一張表，不能只讀第一張
+    heads = list(re.finditer(r'<div id="companyList_([0-9A-Z]+)" title="([^"]*)"[^>]*>', html))
+    for k, m in enumerate(heads):
+        body = html[m.end():heads[k + 1].start() if k + 1 < len(heads) else len(html)]
+        for code in dict.fromkeys(re.findall(r"stk_code=(\d{4})\b", body)):
+            rows.append({"chain_id": ic, "chain": name, "seg_id": m.group(1), "segment": unescape(m.group(2)).strip(), "code": code})
     return rows
 
 

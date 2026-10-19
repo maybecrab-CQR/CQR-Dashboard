@@ -530,6 +530,27 @@ def _leader_table(group,catalog,periods,rising_only,futures_only,rs_filter,colum
     return pd.DataFrame(rows,columns=columns).sort_values("動能(%)",ascending=False).reset_index(drop=True)
 
 
+def stock_search(universe):
+    """個股搜尋：輸入代號或股名即時過濾；選定後主面板／量價訊號的表格與右側圖表都會連動。"""
+    names=dict(zip(universe.code,universe.name)) if not universe.empty else {}
+    return st.selectbox("搜尋個股",list(names),index=None,key="stock_search",label_visibility="collapsed",
+                        placeholder="搜尋代號或股名（例：2330、台積電）",format_func=lambda c:f"{c} {names.get(c,'')}")
+
+
+def search_groups(code,universe,groups,order):
+    """搜尋個股所屬、且有進入排名的族群，依 order（族群強弱排序）排列。"""
+    t=universe.loc[universe.code==code,"ticker"]
+    if t.empty:return []
+    t=t.iloc[0]
+    return [g for g in order if g in groups and t in groups[g]["members"]]
+
+
+def search_row(code,group_name,groups,catalog,periods):
+    """搜尋個股在指定族群內的一列（不套用顯示篩選），找不到回空表。"""
+    full=leader_table(groups.get(group_name),catalog,periods)
+    return full[full["代號"]==code]
+
+
 def strongest_picks(sectors,groups,catalog,quotes,periods=10,n_sec=3,n=3,min_price=50,min_value=2e8):
     """蕭氏選股：先取相對大盤最強的前三個板塊（RS>0），再在每個板塊內取強於族群（RS>0）、
     可交易（股價 ≥ 50、今日成交值 ≥ 2 億）的前三強股票，以及其中有股票期貨的前三強。"""
@@ -1361,15 +1382,19 @@ def section(number, title, note="", cls=""):
     st.markdown(f'<div class="section {cls}"><div class="section-title"><span class="section-number">{number}</span>{escape(title)}</div><span class="section-note">{escape(note)}</span></div>', unsafe_allow_html=True)
 
 
-def ranking_grid(frame, key, height, chosen_column):
+def ranking_grid(frame, key, height, chosen_column, pick=None):
+    """pick：預先選取的值（搜尋連動）；不在表內就選第一列。"""
     frame=frame.copy()
     frame["Momentum"]=frame["動能(%)"].map(momentum_score)
+    hit=frame.index[frame[chosen_column]==pick] if pick is not None else []
+    first=int(frame.index.get_loc(hit[0])) if len(hit) else 0
     builder = GridOptionsBuilder.from_dataframe(frame)
     builder.configure_default_column(resizable=True, sortable=True, filter=False, suppressMovable=True,suppressHeaderMenuButton=True,suppressHeaderFilterButton=True)
-    builder.configure_selection("single", use_checkbox=False, pre_selected_rows=[0])
+    builder.configure_selection("single", use_checkbox=False, pre_selected_rows=[first])
     builder.configure_grid_options(rowHeight=42, headerHeight=52, suppressCellFocus=True,
                                    animateRows=False, suppressRowClickSelection=False,
-                                   onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"))
+                                   onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"),
+                                   onFirstDataRendered=JsCode("function(p){p.api.ensureIndexVisible("+str(first)+",'middle');}"))
     builder.configure_column("資料日",hide=True)
     builder.configure_column("漲幅(%)",headerName="當日漲幅%",headerTooltip="僅資料日期當天的漲跌幅，不受 RS 比較期影響",width=96,minWidth=78,maxWidth=110,wrapHeaderText=True,type=["numericColumn"],valueFormatter=JsCode("function(p){return Number(p.value).toFixed(2);}"))
     if "覆蓋" in frame:builder.configure_column("覆蓋",hide=True)
@@ -1418,7 +1443,7 @@ def ranking_grid(frame, key, height, chosen_column):
         if "類別" in frame:builder.configure_column("類別",width=72,minWidth=70,maxWidth=76)
         if "狀態" in frame:builder.configure_column("狀態",width=124,minWidth=118,maxWidth=130)
     response = AgGrid(frame, gridOptions=builder.build(), height=height, theme="alpine",
-        update_on=["selectionChanged"], fit_columns_on_grid_load=True, key=f"{key}_{height}",
+        update_on=["selectionChanged"], fit_columns_on_grid_load=True, key=f"{key}_{height}"+(f"_{pick}" if pick is not None else ""),
         allow_unsafe_jscode=True, custom_css={
             ".ag-cell,.ag-header-cell": {"padding-left":"6px !important","padding-right":"6px !important"},
             ".ag-root-wrapper": {"background-color":"#0f1620 !important", "border":"1px solid #293442 !important", "border-radius":"10px !important"},
@@ -1436,7 +1461,7 @@ def ranking_grid(frame, key, height, chosen_column):
         choice = rows.iloc[0][chosen_column] if isinstance(rows, pd.DataFrame) else rows[0][chosen_column]
         if choice in frame[chosen_column].values:
             return choice
-    return frame.iloc[0][chosen_column]
+    return frame.iloc[first][chosen_column]
 
 
 @st.cache_resource
@@ -1908,7 +1933,7 @@ def _dashboard(width,height):
     st.session_state["_mobile"]=mobile
     workspace=max(420,height-200) if desktop else 760
     chart_space=max(240,workspace-178)
-    rank_height=max(126,int((workspace-138)/2))
+    rank_height=max(126,int((workspace-138-52)/2))   # 52：上方搜尋框
     if mobile:  # 手機：上下堆疊，表格固定高度、K 線吃滿一個螢幕
         rank_height=min(330,max(260,int(height*.42)));chart_space=max(460,int(height*.78))
     if mobile:
@@ -2079,6 +2104,10 @@ def _dashboard(width,height):
     sig_row=None;sig_stamp="—"
     with left:
         strategy=module=="量價訊號"
+        search=stock_search(universe) if not universe.empty else None
+        linked=False   # 搜尋個股是否已在表格中選取
+        order=list(sectors["族群板塊"]) if not sectors.empty else []
+        hits=search_groups(search,universe,groups,order) if search else []
         if strategy:
             with st.container(key="pick_head"):head_l,head_r=st.columns([1.25,1],gap="small",vertical_alignment="center")
             with head_r:
@@ -2093,6 +2122,22 @@ def _dashboard(width,height):
         elif strategy:
             pool=sectors[sectors["族群板塊"].map(industry_chain.is_preferred)] if focus=="偏好族群" else sectors
             top,picks=strongest_picks(pool,groups,catalog,quotes,periods,n_sec=10,n=5)
+            target=None
+            if search and hits:
+                # 搜尋連動：優先選它已入選的族群；否則選它所屬最強族群，不在前十強就附加在表尾、個股標記「搜尋」
+                in_picks=list(dict.fromkeys(picks.loc[picks["代號"]==search,"_sector"])) if not picks.empty else []
+                shown=set(top["族群板塊"])
+                target=in_picks[0] if in_picks else next((g for g in hits if g in shown),hits[0])
+                if target not in shown:
+                    top=pd.concat([top,sectors[sectors["族群板塊"]==target]],ignore_index=True)
+                if not in_picks:
+                    r=search_row(search,target,groups,catalog,periods)
+                    if r.empty:target=None
+                    else:
+                        tick=universe.loc[universe.code==search,"ticker"].iloc[0]
+                        extra=r.assign(板塊=f"— {target}",類別="搜尋",_sector=target,_ticker=tick)
+                        picks=pd.concat([picks,extra[[c for c in picks.columns if c in extra]]],ignore_index=True)
+            real=picks[picks["類別"]!="搜尋"] if not picks.empty else picks   # 入選／訊號計數不含搜尋附加列
             states={}
             if not picks.empty:
                 srs=dict(zip(top["族群板塊"],top["動能(%)"]))
@@ -2104,30 +2149,42 @@ def _dashboard(width,height):
                     try:states,sig_stamp=xiao_panel.scan_states(cands)
                     except Exception as exc:missing.append(f"量價狀態暫不可用：{exc}")
                 picks["狀態"]=picks["代號"].map(lambda c:xiao_panel.state_label(states.get(c)))
-            count=lambda s,k:int(sum(1 for c in set(picks.loc[picks["_sector"]==s,"代號"]) if (states.get(c) or {}).get("state")==k)) if not picks.empty else 0
+            count=lambda s,k:int(sum(1 for c in set(real.loc[real["_sector"]==s,"代號"]) if (states.get(c) or {}).get("state")==k)) if not real.empty else 0
             sec_tbl=top[[c for c in ("趨勢","族群板塊","動能(%)","漲幅(%)","成交值(億)","資料日") if c in top]].copy()
-            sec_tbl["入選"]=[int((picks["_sector"]==s).sum()) if not picks.empty else 0 for s in sec_tbl["族群板塊"]]
+            sec_tbl["入選"]=[int((real["_sector"]==s).sum()) if not real.empty else 0 for s in sec_tbl["族群板塊"]]
             sec_tbl["訊號"]=[count(s,"signal3")+count(s,"signal") for s in sec_tbl["族群板塊"]]
             sec_tbl["整理"]=[count(s,"setup") for s in sec_tbl["族群板塊"]]
-            selected=ranking_grid(sec_tbl.reset_index(drop=True),f"sig_sectors_{mode}_{periods}",rank_height,"族群板塊")
+            selected=ranking_grid(sec_tbl.reset_index(drop=True),f"sig_sectors_{mode}_{periods}",rank_height,"族群板塊",pick=target)
             section("","前五強股票 ／ 股期",f"{selected} · 強於族群 · 股價≥50 · 成交值≥2億")
             sub=picks[picks["_sector"]==selected].drop(columns=["板塊"]) if not picks.empty else picks
             if sub.empty:
                 st.info("此板塊沒有可交易的強勢個股（強於族群、股價≥50、今日成交值≥2億）。")
             else:
-                code=ranking_grid(sub.reset_index(drop=True),f"sig_stocks_{mode}_{selected}_{periods}",rank_height,"代號")
+                pick=search if selected==target else None
+                linked=pick is not None
+                code=ranking_grid(sub.reset_index(drop=True),f"sig_stocks_{mode}_{selected}_{periods}",rank_height,"代號",pick=pick)
                 rs=float(sub.loc[sub['代號']==code,'動能(%)'].iloc[0])
                 sig_row=states.get(code)
         else:
-            selected=ranking_grid(sectors,f"sectors9_{mode}_{periods}",rank_height,"族群板塊")
+            selected=ranking_grid(sectors,f"sectors9_{mode}_{periods}",rank_height,"族群板塊",pick=hits[0] if hits else None)
             section("","族群成分股",selected)
             stocks=leader_table(groups[selected],catalog,periods,rising_only,futures_only,rs_filter)
+            pick=search if search and selected in hits else None
+            if pick and pick not in set(stocks["代號"]):   # 被顯示篩選（上漲、股期、RS）擋掉的搜尋個股仍放在第一列
+                stocks=pd.concat([search_row(pick,selected,groups,catalog,periods),stocks],ignore_index=True)
             if stocks.empty:
                 if futures_only and catalog is None:st.warning("股期名單待核對，暫停股期篩選。")
                 else:st.info("此族群無符合顯示條件的個股；可關閉股期／上漲限制，或選擇全部 RS。")
             else:
-                code=ranking_grid(stocks,f"stocks9_{mode}_{selected}_{periods}_{rising_only}_{futures_only}_{rs_filter}",rank_height,"代號")
+                linked=pick is not None and pick in set(stocks["代號"])
+                code=ranking_grid(stocks,f"stocks9_{mode}_{selected}_{periods}_{rising_only}_{futures_only}_{rs_filter}",rank_height,"代號",pick=pick if linked else None)
                 rs=float(stocks.loc[stocks['代號']==code,'動能(%)'].iloc[0])
+        if search and not linked and not hits:
+            # 未進入任何族群排名：右側照樣顯示這檔，並說明原因
+            audit={r["代碼"]:r for r in all_sectors.attrs.get("audit17",{}).get("stocks",[])}
+            why=audit.get(search,{}).get("狀態") or "不在本次排名名單"
+            st.warning(f"{search} {stock_names.get(search,'')}：未進入板塊排名（{why}），右側仍可查看；清除搜尋即回到表格選股。")
+            code,rs,sig_row=search,None,None
         note=f"{source} · 排除 {len(missing)} 筆"
         if not universe.empty:note+=f" · 名單 {roc_date(universe.list_date.min()).date()}"
         st.markdown(f'<div class="note-line" title="{escape("；".join(missing))}">{escape(note)}</div>',unsafe_allow_html=True)
