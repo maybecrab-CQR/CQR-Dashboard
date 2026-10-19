@@ -970,7 +970,7 @@ def sector_groups(universe,grouping="產業鏈細分"):
 
 def multiday_market_tables(universe,quotes,periods=10,now=None,max_age=120,closing_day=None,history=None,grouping="產業鏈細分"):
     now=pd.Timestamp(now or taipei_now());market=quotes.get('^TWII')
-    columns=['趨勢','族群板塊','動能(%)','漲幅(%)','覆蓋','資料日']
+    columns=['趨勢','族群板塊','動能(%)','漲幅(%)','成交值(億)','覆蓋','資料日']
     records=[];current={};errors=[];sector_audit=[]
     def fresh(q):
         if not q:return False
@@ -1041,7 +1041,10 @@ def multiday_market_tables(universe,quotes,periods=10,now=None,max_age=120,closi
         codes=[t.split('.')[0] for t in valid];included.update(codes)
         for c in codes:bycode[c]['狀態']='進入板塊排名'
         groups[name]={'basket':basket,'members':valid,'rs':rs,'missing':excluded,'day_changes':changes,'quotes':{c:quotes[c] for c in codes}}
-        rows.append({'趨勢':'強勢' if rs>0 else '弱勢','族群板塊':name,'動能(%)':rs*100,'漲幅(%)':sum(changes.values())/len(changes),'覆蓋':f'{len(valid)}/{len(members)}','資料日':str(asof)})
+        # 當日成交值（億元）＝成分股 價格×成交股數 加總：相對強勢要有量才是真金白銀
+        value=sum(quotes[c]['price']*(quotes[c].get('Volume') or 0) for c in codes)/1e8
+        rows.append({'趨勢':'強勢' if rs>0 else '弱勢','族群板塊':name,'動能(%)':rs*100,'漲幅(%)':sum(changes.values())/len(changes),
+                     '成交值(億)':value,'覆蓋':f'{len(valid)}/{len(members)}','資料日':str(asof)})
     return finish()
 
 
@@ -1148,7 +1151,7 @@ CHIP_CSS='''<style>
 
 
 def render_chip_panel(code,name,market,chips):
-    def num(v,signed=False):return (f'{v:+,.3f}' if signed else f'{v:,.3f}').rstrip('0').rstrip('.')
+    def num(v,signed=False):return (f'{round(v):+,}' if round(v) else '0') if signed else f'{round(v):,}'   # 張數取整數
     def color(v):return 'chip-up' if v>0 else 'chip-down' if v<0 else 'chip-neutral'
     def heading(title,info):
         date=info['date'].isoformat() if info['date'] else '日期待確認'
@@ -1262,7 +1265,7 @@ def chip_trend_html(rows,kind,mode,height):
         fields=[('ratio','券資比%'),('fin_balance','融資餘額'),('short_balance','融券餘額')];unit='%'
     fig=make_subplots(specs=[[{'secondary_y':True}]])
     for key,label,color in series:
-        fig.add_trace(go.Bar(x=x,y=[r.get(key) for r in rows],name=label,marker_color=color,hovertemplate=label+' %{y:,.3f} '+unit+'<extra></extra>'),secondary_y=False)
+        fig.add_trace(go.Bar(x=x,y=[r.get(key) for r in rows],name=label,marker_color=color,hovertemplate=label+(' %{y:,.2f} ' if unit=='%' else ' %{y:,.0f} ')+unit+'<extra></extra>'),secondary_y=False)
     fig.add_trace(go.Scatter(x=x,y=[r.get('price') for r in rows],name='股價',mode='lines+markers',connectgaps=False,line=dict(color='#edbf53',width=2),marker_size=5,hovertemplate='股價 %{y:,.2f}<extra></extra>'),secondary_y=True)
     graph_height=max(160,int(height*.48))
     fig.update_layout(template='plotly_dark',paper_bgcolor='#101823',plot_bgcolor='#101823',height=graph_height,
@@ -1272,9 +1275,11 @@ def chip_trend_html(rows,kind,mode,height):
     fig.update_xaxes(tickvals=x,ticktext=labels,showgrid=False,tickfont_size=12)
     fig.update_yaxes(title_text=unit,secondary_y=False,gridcolor='#253241',zerolinecolor='#9aa9b8',nticks=5)
     fig.update_yaxes(title_text='股價',secondary_y=True,showgrid=False,nticks=5)
-    def value(v,signed=False):
+    def value(v,signed=False,key=''):
         if v is None:return '—'
-        return (f'{v:+,.3f}' if signed else f'{v:,.3f}').rstrip('0').rstrip('.')
+        if key=='ratio':return f'{v:,.2f}'                       # 券資比（%）保留兩位
+        n=round(v)
+        return (f'{n:+,}' if n else '0') if signed else f'{n:,}'   # 張數取整數，不顯示零股
     heads='<th>日期</th>'+''.join('<th>'+label+'</th>' for key,label in fields)+'<th>股價</th>'
     body=''
     for row in reversed(rows):
@@ -1282,7 +1287,7 @@ def chip_trend_html(rows,kind,mode,height):
         for key,label in fields:
             v=row.get(key);signed=key in ('foreign','trust','dealer','total','fin_change','short_change')
             color=('#f37373' if v>0 else '#55c8a4' if v<0 else '#c2cede') if signed and v is not None else '#c2cede'
-            body+=f'<td style="color:{color}">{value(v,signed)}</td>'
+            body+=f'<td style="color:{color}">{value(v,signed,key)}</td>'
         body+='<td style="color:#edbf53">'+(f"{row['price']:,.2f}" if row.get('price') is not None else '—')+'</td></tr>'
     n=sum(r['available'] for r in rows);last=next((r['date'] for r in reversed(rows) if r['available']),'尚未取得')
     caption=f'盤後資料 · 最新可用 {last} · {n}/{len(rows)} 日有資料 · 單位：{unit}／股價元'
@@ -1337,7 +1342,12 @@ def ranking_grid(frame, key, height, chosen_column):
                                    onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"))
     builder.configure_column("資料日",hide=True)
     builder.configure_column("漲幅(%)",headerName="當日漲幅%",headerTooltip="僅資料日期當天的漲跌幅，不受 RS 比較期影響",width=96,minWidth=78,maxWidth=110,wrapHeaderText=True,type=["numericColumn"],valueFormatter=JsCode("function(p){return Number(p.value).toFixed(2);}"))
-    if "覆蓋" in frame:builder.configure_column("覆蓋",headerTooltip="有效行情成分數 / 此產業全部普通股數",width=100,minWidth=96,maxWidth=110)
+    if "覆蓋" in frame:builder.configure_column("覆蓋",hide=True)
+    if "成交值(億)" in frame:
+        builder.configure_column("成交值(億)",headerName="成交值(億)",headerTooltip="族群成分股今日成交值加總（價格×成交股數，億元）。相對強勢要有量才是真金白銀",
+            width=96,minWidth=80,maxWidth=110,type=["numericColumn"],
+            valueFormatter=JsCode("function(p){return p.value==null?'—':Number(p.value).toLocaleString('en-US',{maximumFractionDigits:p.value>=100?0:1});}"),
+            cellStyle=JsCode("function(p){return {color:p.value>=100?'#f2c14e':p.value>=20?'#dbe2ec':'#7a8a9e',fontVariantNumeric:'tabular-nums'};}"))
     if "股期商品" in frame:builder.configure_column("股期商品",hide=True)
     if "相對狀態" in frame:builder.configure_column("相對狀態",hide=True)
     builder.configure_column("趨勢", hide=True, width=65, minWidth=62, maxWidth=72,
@@ -1370,7 +1380,7 @@ def ranking_grid(frame, key, height, chosen_column):
     if st.session_state.get("_mobile"):
         height=min(height,52+42*len(frame)+6)   # 筆數少時表格不留大片空白
         # 手機：只留最重要的欄位，避免表格左右捲動
-        drop=["Momentum","覆蓋","屬性"]+(["漲幅(%)","入選","代號"] if ("訊號" in frame or "狀態" in frame) else [])
+        drop=["Momentum","覆蓋","屬性"]+(["漲幅(%)","入選","代號","成交值(億)"] if ("訊號" in frame or "狀態" in frame) else [])
         for col in drop:
             if col in frame:builder.configure_column(col,hide=True)
         builder.configure_column("動能(%)",headerName="RS%",width=78,minWidth=70,maxWidth=90,wrapHeaderText=False)
@@ -2060,7 +2070,7 @@ def _dashboard(width,height):
                     except Exception as exc:missing.append(f"量價狀態暫不可用：{exc}")
                 picks["狀態"]=picks["代號"].map(lambda c:xiao_panel.state_label(states.get(c)))
             count=lambda s,k:int(sum(1 for c in set(picks.loc[picks["_sector"]==s,"代號"]) if (states.get(c) or {}).get("state")==k)) if not picks.empty else 0
-            sec_tbl=top[["趨勢","族群板塊","動能(%)","漲幅(%)","資料日"]].copy()
+            sec_tbl=top[[c for c in ("趨勢","族群板塊","動能(%)","漲幅(%)","成交值(億)","資料日") if c in top]].copy()
             sec_tbl["入選"]=[int((picks["_sector"]==s).sum()) if not picks.empty else 0 for s in sec_tbl["族群板塊"]]
             sec_tbl["訊號"]=[count(s,"signal3")+count(s,"signal") for s in sec_tbl["族群板塊"]]
             sec_tbl["整理"]=[count(s,"setup") for s in sec_tbl["族群板塊"]]
