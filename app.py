@@ -141,11 +141,12 @@ def number_or_nan(value):
 
 @st.cache_resource
 def http():
-    """共用連線：保持連線（省去每次 TLS 握手），連線失敗、429、5xx 自動退避重試。"""
+    """交易所／期交所共用連線：保持連線省去每次 TLS 握手。只在「連不上」時快速重連一次；
+    逾時、429、5xx 不在這層重試（上層已有重試），避免請求倍增被來源端限流。MIS 不走這裡。"""
     from requests.adapters import HTTPAdapter
     from urllib3.util.retry import Retry
     s=requests.Session()
-    retry=Retry(total=3,connect=3,read=2,backoff_factor=0.6,status_forcelist=(429,500,502,503,504),allowed_methods=("GET",),raise_on_status=False)
+    retry=Retry(total=1,connect=1,read=0,status=0,other=0,backoff_factor=0.3,allowed_methods=("GET",),raise_on_status=False)
     adapter=HTTPAdapter(max_retries=retry,pool_connections=8,pool_maxsize=16)
     s.mount("https://",adapter);s.mount("http://",adapter)
     s.headers.update({"User-Agent":"Mozilla/5.0"})
@@ -611,13 +612,12 @@ def parse_mis(payload):
 
 
 def mis_batch(channels):
-    response=http().get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
-        params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=(5,10),
-        headers={"Referer":"https://mis.twse.com.tw/stock/index.jsp"})
+    # MIS 對同一 IP 的頻繁請求會暫時封鎖：這裡刻意不自動重試、不共用連線，維持每批只打一次。
+    response=requests.get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+        params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=12,
+        headers={"User-Agent":"Mozilla/5.0","Referer":"https://mis.twse.com.tw/stock/index.jsp"})
     response.raise_for_status()
-    data=response.json()
-    if not isinstance(data,dict) or "msgArray" not in data:raise ValueError(f"MIS 回應異常：{str(data)[:80]}")
-    return parse_mis(data)
+    return parse_mis(response.json())
 
 
 @st.cache_data(ttl=30,show_spinner=False)
@@ -628,14 +628,7 @@ def public_quotes(channels):
     batches=[list(channels[i:i+50]) for i in range(0,len(channels),50)];errors=[]
     def safe(batch):
         try:return mis_batch(batch),None
-        except Exception:pass
-        # 整批失敗（逾時、單一代號造成回應異常）：拆成兩半再各試一次，避免一檔拖垮 50 檔
-        got,errs={}, []
-        for half in (batch[:len(batch)//2],batch[len(batch)//2:]):
-            if not half:continue
-            try:got.update(mis_batch(half))
-            except Exception as exc:errs.append(str(exc))
-        return got,("；".join(errs) or None)
+        except Exception as exc:return {},str(exc)
     with ThreadPoolExecutor(max_workers=3) as pool:
         for data,error in pool.map(safe,batches):
             quotes.update(data)
@@ -2005,18 +1998,23 @@ def _dashboard(width,height):
                         if live:
                             # 盤中優先用證交所 MIS（延遲約 5 秒、每次 50 檔，全市場約 10～20 秒）；
                             # MIS 取不到或覆蓋不到六成（例如雲端主機被擋）才改用 Yahoo 分鐘資料（延遲約 20 分鐘、逐檔下載較慢）
-                            mis_error=None
+                            # MIS 部分成功（≥20%）就直接用：即時、快；不再為了補齊改跑 Yahoo（逐檔下載要好幾分鐘、覆蓋常更低）。
+                            mis_error=None;mis=None
                             try:
-                                local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
-                                if len(local_quotes)<0.6*len(universe):raise ValueError(f"MIS 只回傳 {len(local_quotes)} 檔")
-                                label="MIS 盤中快照"
+                                mis=session_quote_snapshot(universe,max_age)
+                                if len(mis[0])<0.2*len(universe):raise ValueError(f"MIS 只回傳 {len(mis[0])} 檔")
+                                local_quotes,errors,src,day,label=mis;label="MIS 盤中快照"
+                                if len(local_quotes)<0.6*len(universe):errors=[f"MIS 部分批次失敗，本輪只取得 {len(local_quotes)} 檔，下輪自動補"]+list(errors)
                             except Exception as exc:
                                 mis_error=str(exc)
                                 try:
                                     local_quotes,errors,src,day,label,yahoo_diag=load_yahoo16(universe,max_age,alignment)
                                     errors=[f"MIS 未取得，改用 Yahoo：{mis_error}"]+list(errors)
+                                    if mis and len(mis[0])>len(local_quotes):   # Yahoo 反而更少：仍用 MIS
+                                        local_quotes,errors,src,day,label=mis;label="MIS 盤中快照"
                                 except Exception as yexc:
-                                    raise ValueError(f"MIS：{mis_error}；Yahoo：{yexc}")
+                                    if mis and mis[0]:local_quotes,errors,src,day,label=mis;label="MIS 盤中快照"
+                                    else:raise ValueError(f"MIS：{mis_error}；Yahoo：{yexc}")
                         else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)  # 盤前／盤後／休市：官方收盤，整批取得、不受 Yahoo 限流
                     elif mode=="券商即時報價檔":local_quotes,errors,src=broker_quotes(feed_path,max_age=max_age)
                     else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
