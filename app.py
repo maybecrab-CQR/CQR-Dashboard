@@ -1666,6 +1666,13 @@ def selected_quote19(code,ticker,mode):
             q=mis_batch([channel]).get(code)
             if not q:raise ValueError('MIS未提供成交價')
         elif mode=='Yahoo 延遲盤中掃描':
+            # 選中個股的即時價：先問 MIS（約 5 秒延遲），失敗才查 Yahoo 分鐘棒
+            try:
+                channel=('otc_' if ticker.endswith('.TWO') else 'tse_')+code+'.tw'
+                q=mis_batch([channel]).get(code)
+                if q and q['timestamp'].date()==now.date():return q,None
+            except Exception:
+                pass
             state=yahoo_state16()
             if clock.monotonic()<state['cooldown']:raise ValueError('Yahoo限流冷卻中')
             if not state['lock'].acquire(blocking=False):raise ValueError('Yahoo全市場更新中')
@@ -1690,13 +1697,15 @@ def selected_quote19(code,ticker,mode):
 
 def quote_label19(quote,mode,now=None):
     now=pd.Timestamp(now or taipei_now())
-    source='MIS' if mode=='全市場盤中快照' else 'Yahoo 1分K' if mode=='Yahoo 延遲盤中掃描' else '券商報價檔' if mode=='券商即時報價檔' else '交易所收盤'
     if not quote:return '歷史K線 · 無當次盤中成交價'
+    from_yahoo=str(quote.get('source','')).startswith('Yahoo')
+    source=('Yahoo 1分K' if from_yahoo else '證交所 MIS') if mode=='Yahoo 延遲盤中掃描' else 'MIS' if mode=='全市場盤中快照' else '券商報價檔' if mode=='券商即時報價檔' else '交易所收盤'
+    if quote.get('price_kind') and quote['price_kind']!='成交價':source+=f"（{quote['price_kind']}）"
     stamp=quote['timestamp'];age=max(0,(now-stamp).total_seconds())
     if stamp.date()!=now.date():phase='歷史報價'
     elif now.time()>=time(13,30):phase='收盤資料' if mode in ('全市場盤中快照','全市場收盤') else '盤後最後報價'
     elif now.time()<time(9):phase='盤前資料'
-    elif mode=='Yahoo 延遲盤中掃描':phase=f'分鐘快照 · 距今 {age/60:.1f} 分鐘'
+    elif mode=='Yahoo 延遲盤中掃描' and from_yahoo:phase=f'分鐘快照 · 距今 {age/60:.1f} 分鐘'
     elif age>120:phase=f'保留成交價 · 距今 {age/60:.1f} 分鐘'
     else:phase=f'盤中快照 · 距今 {age:.0f} 秒'
     return f'{source} · {phase} · {stamp:%m/%d %H:%M:%S}'
@@ -1954,12 +1963,20 @@ def _dashboard(width,height):
                         clock_now=taipei_now()
                         live=expected_session(clock_now.replace(hour=14,minute=0,second=0,microsecond=0))==clock_now.date() and time(9)<=clock_now.time()<time(13,30)
                         if live:
-                            try:local_quotes,errors,src,day,label,yahoo_diag=load_yahoo16(universe,max_age,alignment)
-                            except Exception as exc:
-                                # 開盤後約 15～20 分鐘 Yahoo 還沒有當日分鐘資料，或遇到限流：改用證交所 MIS 盤中快照（延遲約 5 秒）
+                            # 盤中優先用證交所 MIS（延遲約 5 秒、每次 50 檔，全市場約 10～20 秒）；
+                            # MIS 取不到或覆蓋不到六成（例如雲端主機被擋）才改用 Yahoo 分鐘資料（延遲約 20 分鐘、逐檔下載較慢）
+                            mis_error=None
+                            try:
                                 local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
-                                errors=[f"Yahoo 盤中資料未就緒，改用證交所 MIS：{exc}"]+list(errors)
-                                src="證交所 MIS 盤中快照（Yahoo 未就緒）";label="MIS 盤中快照"
+                                if len(local_quotes)<0.6*len(universe):raise ValueError(f"MIS 只回傳 {len(local_quotes)} 檔")
+                                label="MIS 盤中快照"
+                            except Exception as exc:
+                                mis_error=str(exc)
+                                try:
+                                    local_quotes,errors,src,day,label,yahoo_diag=load_yahoo16(universe,max_age,alignment)
+                                    errors=[f"MIS 未取得，改用 Yahoo：{mis_error}"]+list(errors)
+                                except Exception as yexc:
+                                    raise ValueError(f"MIS：{mis_error}；Yahoo：{yexc}")
                         else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)  # 盤前／盤後／休市：官方收盤，整批取得、不受 Yahoo 限流
                     elif mode=="券商即時報價檔":local_quotes,errors,src=broker_quotes(feed_path,max_age=max_age)
                     else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
