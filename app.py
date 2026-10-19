@@ -134,6 +134,11 @@ def number(value):
     return float(str(value).replace(",", ""))
 
 
+def number_or_nan(value):
+    try:return number(value)
+    except (ValueError,TypeError):return float("nan")
+
+
 def get_json(url, params=None):
     error=None
     for attempt in range(2):
@@ -577,7 +582,13 @@ def parse_mis(payload):
         try:
             code="^TWII" if r.get("c")=="t00" and r.get("ex")=="tse" else str(r["c"])
             stamp=pd.Timestamp(f"{r['d']} {r['t']}",tz="Asia/Taipei")
-            q=quote_record(code,r["z"],r["y"],stamp)
+            # 5 秒快照內剛好沒成交時 z 是「-」：改用前一筆成交價 pz，再沒有就用最佳委買委賣中間價（標示來源）
+            price,kind=r.get("z"),"成交價"
+            if not math.isfinite(number_or_nan(price)):
+                bid=number_or_nan(str(r.get("b","")).split("_")[0]);ask=number_or_nan(str(r.get("a","")).split("_")[0])
+                if math.isfinite(number_or_nan(r.get("pz"))):price,kind=r.get("pz"),"前一筆成交價"
+                elif math.isfinite(bid) and math.isfinite(ask) and bid>0 and ask>0:price,kind=(bid+ask)/2,"委買委賣中間價"
+            q=quote_record(code,price,r["y"],stamp,price_kind=kind)
             for out,field,scale in [("Open","o",1),("High","h",1),("Low","l",1),("Volume","v",1000)]:
                 try:q[out]=number(r[field])*scale
                 except (KeyError,ValueError):pass
@@ -1942,7 +1953,13 @@ def _dashboard(width,height):
                     elif mode=="Yahoo 延遲盤中掃描":
                         clock_now=taipei_now()
                         live=expected_session(clock_now.replace(hour=14,minute=0,second=0,microsecond=0))==clock_now.date() and time(9)<=clock_now.time()<time(13,30)
-                        if live:local_quotes,errors,src,day,label,yahoo_diag=load_yahoo16(universe,max_age,alignment)
+                        if live:
+                            try:local_quotes,errors,src,day,label,yahoo_diag=load_yahoo16(universe,max_age,alignment)
+                            except Exception as exc:
+                                # 開盤後約 15～20 分鐘 Yahoo 還沒有當日分鐘資料，或遇到限流：改用證交所 MIS 盤中快照（延遲約 5 秒）
+                                local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
+                                errors=[f"Yahoo 盤中資料未就緒，改用證交所 MIS：{exc}"]+list(errors)
+                                src="證交所 MIS 盤中快照（Yahoo 未就緒）";label="MIS 盤中快照"
                         else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)  # 盤前／盤後／休市：官方收盤，整批取得、不受 Yahoo 限流
                     elif mode=="券商即時報價檔":local_quotes,errors,src=broker_quotes(feed_path,max_age=max_age)
                     else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
