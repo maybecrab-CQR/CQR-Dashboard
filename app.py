@@ -612,10 +612,17 @@ def parse_mis(payload):
 
 
 def mis_batch(channels):
-    # MIS 對同一 IP 的頻繁請求會暫時封鎖：這裡刻意不自動重試、不共用連線，維持每批只打一次。
-    response=requests.get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
-        params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=12,
-        headers={"User-Agent":"Mozilla/5.0","Referer":"https://mis.twse.com.tw/stock/index.jsp"})
+    # MIS 偶爾直接斷線（RemoteDisconnected）：只有這種「連線被中斷」才稍等重試，最多 3 次。
+    # 逾時、HTTP 錯誤不重試，避免請求倍增被 MIS 暫時封鎖 IP。
+    for attempt in range(3):
+        try:
+            response=requests.get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+                params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=12,
+                headers={"User-Agent":"Mozilla/5.0","Referer":"https://mis.twse.com.tw/stock/index.jsp"})
+            break
+        except requests.exceptions.ConnectionError:
+            if attempt==2:raise
+            clock.sleep(1.0*(attempt+1))
     response.raise_for_status()
     return parse_mis(response.json())
 
