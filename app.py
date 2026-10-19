@@ -1686,6 +1686,15 @@ READABLE_CSS="""<style>
 [data-testid="stPopover"] button,[data-testid="stPopoverButton"],button[aria-haspopup="dialog"]{background:#18212d!important;border:1px solid #344353!important;color:#cbd6e5!important}
 
 [data-baseweb="select"]>div{background:#18212d!important;color:#dce5ef!important;border-color:#344353!important}[data-baseweb="select"] svg{fill:#dce5ef!important}
+.st-key-stock_search [role="group"]{background:#05080c!important;border:1px solid #3a4658!important;border-radius:8px!important;min-height:42px}
+.st-key-stock_search [role="group"]:focus-within{border-color:#cfb679!important;box-shadow:0 0 0 1px rgba(207,182,121,.45)!important}
+.st-key-stock_search [data-testid="stSelectbox"] input[role="combobox"],.st-key-stock_search input{background:transparent!important;border:0!important;color:#ffffff!important;caret-color:#d7bf84;font-size:17px!important}
+.st-key-stock_search input::placeholder{color:#7f8da0!important}
+.st-key-stock_search [role="group"] svg{fill:#cfd8e3!important;color:#cfd8e3!important}
+[data-testid="stSelectboxVirtualDropdown"]{background:#05080c!important;border:1px solid #3a4658!important;border-radius:8px!important;box-shadow:0 10px 28px rgba(0,0,0,.6)!important}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"]{background:transparent!important;color:#ffffff!important;font-size:17px!important}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"] *{color:inherit!important;font-size:17px!important}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-hovered],[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-focused],[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"]{background:#2a2b24!important;color:#f2d99a!important}
 .brand-title{font-size:28px}.eyebrow{font-size:12px}.brand{height:52px}
 .metric{padding:8px 12px;min-width:0}.metric-label{font-size:14px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric-value{font-size:25px!important;line-height:1.35}.metric-row{height:76px}
 .section{height:32px;min-width:0;gap:8px}.section-title{font-size:19px;white-space:nowrap}.section-note{font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
