@@ -33,7 +33,7 @@ MODULES=["主面板","量價訊號"]  # 頂部策略模組；新增模組時加�
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from plotly.offline import get_plotlyjs
+from plotly.offline import get_plotlyjs, get_plotlyjs_version
 from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 sector_stocks = {
@@ -139,11 +139,24 @@ def number_or_nan(value):
     except (ValueError,TypeError):return float("nan")
 
 
+@st.cache_resource
+def http():
+    """共用連線：保持連線（省去每次 TLS 握手），連線失敗、429、5xx 自動退避重試。"""
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    s=requests.Session()
+    retry=Retry(total=3,connect=3,read=2,backoff_factor=0.6,status_forcelist=(429,500,502,503,504),allowed_methods=("GET",),raise_on_status=False)
+    adapter=HTTPAdapter(max_retries=retry,pool_connections=8,pool_maxsize=16)
+    s.mount("https://",adapter);s.mount("http://",adapter)
+    s.headers.update({"User-Agent":"Mozilla/5.0"})
+    return s
+
+
 def get_json(url, params=None):
     error=None
     for attempt in range(2):
         try:
-            response=requests.get(url,params=params,timeout=15,headers={"User-Agent":"Mozilla/5.0"})
+            response=http().get(url,params=params,timeout=(5,15))
             response.raise_for_status()
             return response.json()
         except (requests.RequestException,ValueError) as exc:error=exc
@@ -423,7 +436,7 @@ def parse_futures_json(rows):
 def futures_catalog():
     try:catalog=parse_futures_json(get_json("https://openapi.taifex.com.tw/v1/SSFLists"))
     except Exception:
-        response=requests.get("https://www.taifex.com.tw/cht/2/stockLists",timeout=20,headers={"User-Agent":"Mozilla/5.0"})
+        response=http().get("https://www.taifex.com.tw/cht/2/stockLists",timeout=(5,20))
         response.raise_for_status();response.encoding="utf-8"
         catalog=parse_futures_html(response.text)
     return catalog,taipei_now().strftime("%Y/%m/%d %H:%M")
@@ -598,11 +611,13 @@ def parse_mis(payload):
 
 
 def mis_batch(channels):
-    response=requests.get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
-        params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=12,
-        headers={"User-Agent":"Mozilla/5.0","Referer":"https://mis.twse.com.tw/stock/index.jsp"})
+    response=http().get("https://mis.twse.com.tw/stock/api/getStockInfo.jsp",
+        params={"ex_ch":"|".join(channels),"json":"1","delay":"0"},timeout=(5,10),
+        headers={"Referer":"https://mis.twse.com.tw/stock/index.jsp"})
     response.raise_for_status()
-    return parse_mis(response.json())
+    data=response.json()
+    if not isinstance(data,dict) or "msgArray" not in data:raise ValueError(f"MIS 回應異常：{str(data)[:80]}")
+    return parse_mis(data)
 
 
 @st.cache_data(ttl=30,show_spinner=False)
@@ -613,7 +628,14 @@ def public_quotes(channels):
     batches=[list(channels[i:i+50]) for i in range(0,len(channels),50)];errors=[]
     def safe(batch):
         try:return mis_batch(batch),None
-        except Exception as exc:return {},str(exc)
+        except Exception:pass
+        # 整批失敗（逾時、單一代號造成回應異常）：拆成兩半再各試一次，避免一檔拖垮 50 檔
+        got,errs={}, []
+        for half in (batch[:len(batch)//2],batch[len(batch)//2:]):
+            if not half:continue
+            try:got.update(mis_batch(half))
+            except Exception as exc:errs.append(str(exc))
+        return got,("；".join(errs) or None)
     with ThreadPoolExecutor(max_workers=3) as pool:
         for data,error in pool.map(safe,batches):
             quotes.update(data)
@@ -1238,10 +1260,18 @@ def momentum_score(rs):
 @st.cache_resource
 def interactive_chart_component():
     path=Path(tempfile.mkdtemp(prefix='cqr_chart_'))
+    # plotly.js 放在元件目錄由本站提供，圖表 HTML 只寫 <script src="plotly.min.js">：不必每次切頁／刷新都重送 4.7 MB，
+    # 也不依賴外部 CDN。Streamlit 靜態檔沒有快取期限，所以外框頁把它存進瀏覽器 Cache Storage（檔名含版本），
+    # 之後換成本機 blob 網址交給圖表；Cache Storage 不可用時退回一般相對路徑。
+    lib=f'plotly-{get_plotlyjs_version()}.min.js'
+    (path/lib).write_text(plotly_bundle(),encoding='utf-8')
     (path/'index.html').write_text('''<!doctype html><html><body style="margin:0;overflow:hidden"><iframe id="inner" style="width:100%;border:0;display:block" title="互動K線"></iframe><script>
-const frame=document.getElementById('inner');let last='';
+const frame=document.getElementById('inner');let last='';const LIB="'''+lib+'''";let libUrl=LIB;
+const libReady=(async()=>{try{const c=await caches.open('cqr-lib');let r=await c.match(LIB);
+if(!r){for(const k of await c.keys())await c.delete(k);await c.add(LIB);r=await c.match(LIB);}
+libUrl=URL.createObjectURL(await r.blob());}catch(err){libUrl=LIB;}})();
 const send=(type,extra={})=>parent.postMessage({isStreamlitMessage:true,type,...extra},'*');
-window.addEventListener('message',e=>{if(e.data.type==='streamlit:render'){const a=e.data.args;frame.style.height=a.height+'px';if(last!==a.html){last=a.html;frame.srcdoc=a.html;}send('streamlit:setFrameHeight',{height:a.height});}
+window.addEventListener('message',e=>{if(e.data.type==='streamlit:render'){const a=e.data.args;frame.style.height=a.height+'px';if(last!==a.html){const html=a.html;last=html;libReady.then(()=>{if(last===html)frame.srcdoc=html.replace('src="plotly.min.js"','src="'+libUrl+'"');});}send('streamlit:setFrameHeight',{height:a.height});}
 if(e.source===frame.contentWindow&&e.data.type==='cq-timeframe'&&['日K','周K','月K','1分','15分','30分','60分'].includes(e.data.value)){send('streamlit:setComponentValue',{value:{timeframe:e.data.value,event:Date.now()},dataType:'json'});}});
 send('streamlit:componentReady',{apiVersion:1});
 </script></body></html>''',encoding='utf-8')
@@ -1295,7 +1325,7 @@ def chip_trend_html(rows,kind,mode,height):
     payload=json.dumps(json.loads(fig.to_json())).replace('</','<\\/')
     return '''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><style>
 *{box-sizing:border-box}body{margin:0;background:#101823;color:#c2cede;font:15px 'Microsoft JhengHei','Segoe UI',sans-serif}.shell{height:100vh;border:1px solid #344150;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}.caption{padding:10px 14px;color:#c6b17c;font-size:13px;border-bottom:1px solid #293746}.chart{flex:none}.table{flex:1;overflow:auto;min-height:80px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th{position:sticky;top:0;background:#1b2734;color:#aebfd3;font-size:13px;z-index:2}td,th{padding:10px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #293746}td:first-child,th:first-child{text-align:left}tr:first-child td{background:#1a2631;font-weight:650}tbody tr:hover{background:#202d3c}.note{font-size:12px;padding:8px 12px;color:#99adc5;border-top:1px solid #293746}@media(max-height:520px){td,th{padding:7px 8px}.caption{padding:7px 12px}}
-</style><script>'''+plotly_bundle()+'''</script></head><body><div class="shell"><div class="caption">'''+caption+'''</div><div id="chip-graph" class="chart"></div><div class="table"><table><thead><tr>'''+heads+'''</tr></thead><tbody>'''+body+'''</tbody></table></div><div class="note">'''+notes+'''</div></div><script>const f='''+payload+''';Plotly.newPlot('chip-graph',f.data,f.layout,{responsive:true,displayModeBar:false,displaylogo:false});</script></body></html>'''
+</style><script src="plotly.min.js"></script></head><body><div class="shell"><div class="caption">'''+caption+'''</div><div id="chip-graph" class="chart"></div><div class="table"><table><thead><tr>'''+heads+'''</tr></thead><tbody>'''+body+'''</tbody></table></div><div class="note">'''+notes+'''</div></div><script>const f='''+payload+''';Plotly.newPlot('chip-graph',f.data,f.layout,{responsive:true,displayModeBar:false,displaylogo:false});</script></body></html>'''
 
 
 @st.fragment
@@ -1314,7 +1344,7 @@ def render_chip_trends(code,name,ticker,market,kind,quote,workspace):
     with st.spinner('讀取近期籌碼與對應股價…'):
         try:rows,errors=stock_chip_history(code,ticker,market,kind,target,count)
         except Exception as exc:st.warning(f'籌碼歷史暫不可用：{exc}');return
-    components.html(chip_trend_html(rows,kind,mode,max(300,workspace-110)),height=max(300,workspace-110),scrolling=False)
+    interactive_chart_component()(html=chip_trend_html(rows,kind,mode,max(300,workspace-110)),height=max(300,workspace-110),key=f'chip_{kind}',default=None)
     message='；'.join(errors) if errors else '所選日期資料已齊全'
     st.markdown(f'<div class="note-line" title="{escape(message)}">來源：{"證交所" if market=="上市" else "櫃買中心"} · 逐日核對 · {escape(message)}</div>',unsafe_allow_html=True)
 
@@ -1475,7 +1505,7 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=()):
     meta = {"labels":labels,"open":values(df.Open),"high":values(df.High),"low":values(df.Low),"close":values(df.Close),
             "volume":values(df.Volume),"priceLines":[values(df[f"MA{n}"]) for n in (3,10,21,52)],
             "volumeLines":[values(df[f"VMA{n}"]) for n in (5,13,34)],"key":f"cq-viewport-v2-{ticker}-{interval}","height":height,"timeframe":interval}
-    template = CHART_TEMPLATE.replace("__PLOTLY__",plotly_bundle()).replace("__FIGURE__",json.dumps(payload).replace("</","<\\/"))
+    template = CHART_TEMPLATE.replace("__FIGURE__",json.dumps(payload).replace("</","<\\/"))
     return template.replace("__META__",json.dumps(meta).replace("</","<\\/"))
 
 
@@ -1489,7 +1519,7 @@ body{font-size:16px}.toolbar{flex-wrap:wrap;gap:3px;padding:6px}.toolbar button{
 body{font-size:17px}.label,.hint{font-size:14px!important;color:#b9c5d6}.toolbar button,#timeframe{font-size:16px}.ohlc span{font-size:15px!important}.ohlc b{font-size:23px!important}.bar-date,#ma-values{font-size:15px!important}#deduct-values{font-size:15px;line-height:23px}#deduct-values .deduct-title{min-width:122px}#deduct-values b{font-size:16px}
 @media(max-width:600px){body{font-size:15px}.toolbar button,#timeframe{font-size:14px;padding:5px 6px}.ohlc b{font-size:17px!important}.ohlc span{font-size:13px!important}#deduct-values{font-size:13px;line-height:20px}#deduct-values b{font-size:14px}.hint{display:none}#chart .legend{display:none}#ma-values{font-size:13px!important}}
 @media(max-width:600px){.ohlc b{font-size:16px}.ohlc{gap:5px}.toolbar button{font-size:12px}}
-</style><script>__PLOTLY__</script></head><body><div class="shell" id="shell">
+</style><script src="plotly.min.js"></script></head><body><div class="shell" id="shell">
 <div class="toolbar"><span class="label">視野</span><button data-bars="30">30 根</button><button data-bars="60">60 根</button><button data-bars="120">120 根</button><button data-bars="all">全部</button><span class="sep"></span><button id="auto" class="active" title="可視 K 棒與均線自動適配價格及成交量軸">自動 Y 軸</button><button id="deduct" class="active" title="標示以最新 K 棒為準、下一根將移出的均價／均量資料">扣抵標示</button><select id="timeframe" aria-label="K線週期" title="切換K線週期"><option value="日K">日K</option><option value="周K">周K</option><option value="月K">月K</option><option value="1分">1分</option><option value="15分">15分</option><option value="30分">30分</option><option value="60分">60分</option></select><span class="spacer"></span><button id="latest" class="active">回到最新</button><button id="reset">重設</button><button id="full">全螢幕</button></div>
 <div class="bar-date" id="bar-date"></div><div class="ohlc">
 <div><span>開盤</span><b id="v-open"></b></div><div><span>最高</span><b id="v-high"></b></div><div><span>最低</span><b id="v-low"></b></div><div><span>收盤</span><b id="v-close"></b></div><div><span>成交量（張）</span><b id="v-volume"></b></div></div>
