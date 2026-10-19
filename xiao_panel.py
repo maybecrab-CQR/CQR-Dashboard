@@ -215,7 +215,8 @@ def _live_v2(cands):
         sec_rank = pd.Series(rank.get(t, 99), index=x.index)
         xs.add_features(x, sec_rs, sec_rank, idx)
         xs.add_v3(x, idx)
-        pref = c["sector"] in xs.PREFERRED
+        # 偏好範圍以個股的官方產業別判斷（與回測一致）；沒有官方產業別時看族群名稱
+        pref = c.get("official") in xs.PREFERRED if c.get("official") else c["sector"] in xs.PREFERRED
         st_ = xs.today_state3(x, preferred=pref)
         checks = xs.checks_v3(x)
         checks["偏好族群"] = pref

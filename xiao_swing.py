@@ -61,6 +61,43 @@ def sector_strength(data, sector_of, idx_close, days=10):
     return sec_rs, sec_rank
 
 
+def sector_strength_multi(data, groups, idx_close, days=10):
+    """一檔可屬多個族群（產業鏈細分）。groups：{族群: [ticker...]}。
+    每檔的 sec_rs＝它所屬族群中「它排前三名的族群」的最強族群強度（沒有排前三就取所屬族群最強者），
+    sec_rank＝它在「強於大盤的族群」裡的最佳名次（沒有就取所有族群裡的最佳名次）。
+    這樣 v3 的「族群強且族群前三」＝存在某個強勢族群，它在裡面排前三。回傳 (sec_rs, sec_rank) 兩個 dict。"""
+    closes = pd.DataFrame({t: x.c for t, x in data.items()})
+    rs10 = pd.DataFrame({t: x.rs10 for t, x in data.items()}).reindex(closes.index)
+    liquid = pd.DataFrame({t: x.liquid for t, x in data.items()}).reindex(closes.index).fillna(False).astype(bool)
+    idx_ret = (idx_close / idx_close.shift(days) - 1).reindex(closes.index)
+    g_rs, g_rank = {}, {}
+    for g, members in groups.items():
+        cols = [t for t in members if t in data]
+        if len(cols) < 3:
+            continue
+        g_rs[g] = (closes[cols] / closes[cols].shift(days) - 1).mean(axis=1).sub(idx_ret) * 100
+        g_rank[g] = rs10[cols].where(liquid[cols]).rank(axis=1, ascending=False)
+    member_of = {}
+    for g in g_rs:
+        for t in g_rank[g].columns:
+            member_of.setdefault(t, []).append(g)
+    sec_rs, sec_rank = {}, {}
+    for t in data:
+        gs = member_of.get(t, [])
+        if not gs:
+            sec_rs[t] = pd.Series(np.nan, index=closes.index)
+            sec_rank[t] = pd.Series(np.nan, index=closes.index)
+            continue
+        R = pd.DataFrame({g: g_rs[g] for g in gs})
+        K = pd.DataFrame({g: g_rank[g][t] for g in gs})
+        top3 = K <= Q["top_in_sector"]
+        strong = R > 0
+        rs_top = R.where(top3).max(axis=1)
+        sec_rs[t] = rs_top.fillna(R.max(axis=1))
+        sec_rank[t] = K.where(strong).min(axis=1).fillna(K.min(axis=1))
+    return sec_rs, sec_rank
+
+
 def add_features(x, sector_rs, sector_rank, idx_close):
     v = x.v
     x["vma5"], x["vma13"], x["vma21"] = v.rolling(5).mean(), v.rolling(13).mean(), v.rolling(21).mean()

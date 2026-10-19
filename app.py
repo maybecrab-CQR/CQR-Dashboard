@@ -23,6 +23,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import huanan_panel
 import xiao_panel
+import industry_chain
 import hmac
 import os
 
@@ -941,7 +942,22 @@ def repair_history17(symbols,days,limit=120):
     finally:state['lock'].release()
 
 
-def multiday_market_tables(universe,quotes,periods=10,now=None,max_age=120,closing_day=None,history=None):
+GROUPING_MODES=["產業鏈細分","官方產業別"]
+
+
+def sector_groups(universe,grouping="產業鏈細分"):
+    """族群分組：產業鏈細分（櫃買中心產業價值鏈，一檔可屬多個族群）或官方產業別。回傳 [(族群名, 成分DataFrame)]。"""
+    if grouping=="官方產業別":
+        return list(universe.groupby('sector',sort=True))
+    try:
+        gmap=industry_chain.groups(set(universe.code))
+    except Exception:
+        return list(universe.groupby('sector',sort=True))   # 產業鏈資料取不到時退回官方產業別
+    bycode=universe.set_index('code',drop=False)
+    return [(name,bycode.loc[[c for c in codes if c in bycode.index]]) for name,codes in sorted(gmap.items())]
+
+
+def multiday_market_tables(universe,quotes,periods=10,now=None,max_age=120,closing_day=None,history=None,grouping="產業鏈細分"):
     now=pd.Timestamp(now or taipei_now());market=quotes.get('^TWII')
     columns=['趨勢','族群板塊','動能(%)','漲幅(%)','覆蓋','資料日']
     records=[];current={};errors=[];sector_audit=[]
@@ -1003,7 +1019,7 @@ def multiday_market_tables(universe,quotes,periods=10,now=None,max_age=120,closi
         history_complete.add(code)
         frames[symbols[code]]=pd.DataFrame({'Close':[past[d][code]['price'] for d in days]+[q['price']]},index=calendar)
         bycode[code]['狀態']='板塊覆蓋不足'
-    for name,members in universe.groupby('sector',sort=True):
+    for name,members in sector_groups(universe,grouping):
         minimum=max(min(3,len(members)),math.ceil(len(members)*.8))
         complete=[c for c in members.code if c in history_complete]
         sector_audit.append({'板塊':name,'全部':len(members),'有價格及參考價':sum(c in quotes for c in members.code),'時間有效':sum(c in current for c in members.code),'歷史齊全':len(complete),'最低需要':minimum,'尚缺':max(0,minimum-len(complete)),'狀態':'可排名' if len(complete)>=minimum else '覆蓋不足'})
@@ -1332,7 +1348,7 @@ def ranking_grid(frame, key, height, chosen_column):
         builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e2c47c',fontWeight:p.value==='股票'?'400':'700',fontSize:'17px'};}"))
         builder.configure_column("屬性",hide=True)
     if "族群板塊" in frame:
-        builder.configure_column("族群板塊", width=140, minWidth=114,maxWidth=190,tooltipField="族群板塊")
+        builder.configure_column("族群板塊", width=190, minWidth=130,maxWidth=260,tooltipField="族群板塊")
     else:
         builder.configure_column("趨勢", hide=True)
         builder.configure_column("代號", width=70, minWidth=68,maxWidth=80)
@@ -1874,6 +1890,8 @@ def _dashboard(width,height):
             mode="Yahoo 延遲盤中掃描";st.session_state.scan_mode16=mode
             periods=st.selectbox("相對強弱比較期（交易日）",[5,10,20],index=1,key="period9",help="所有模式皆可選 5／10／20 個交易日。RS 依此期間計算；當日漲幅只看資料日期當天。盤中以目前有效報價作為比較終點。")
             rs_filter=st.selectbox("族群內個股範圍",["全部","只看 RS > 0","只看 RS ≤ 0"],key="rs_scope7",help="全部：保留所有有效成分。RS > 0：跑贏所屬族群。RS ≤ 0：與族群同步或落後族群；不一定是股價下跌。")
+            grouping=st.selectbox("族群分類",GROUPING_MODES,index=0,key="grouping9",
+                help="產業鏈細分：櫃買中心產業價值鏈，約 280 個族群（例：印刷電路板／硬板、軟板、IC載板製造），一檔可屬多個族群。官方產業別：證交所／櫃買 34 類。回測顯示產業鏈細分選出的強勢族群較準。")
             rising_only=st.checkbox("只看自身漲幅 > 0",value=False,key="rising7",help="觀察拉回時請保持關閉；RS < 0 只代表落後族群，不等於已形成買點。")
             futures_only=st.checkbox("只看有股期",value=False,key="futures7",help="只留下期交所名單中有對應股票期貨的現股。表格與 K 線仍是現股行情，不是期貨成交價。")
             if True:
@@ -1900,7 +1918,7 @@ def _dashboard(width,height):
     universe=pd.DataFrame();quotes={};groups={};missing=[];source="";valid=0
     effective_label=mode;frozen=False;update_error=None
     period=periods
-    snapshot_key=repr(("snapshot9",mode,period,str(taipei_now().date()),feed_path if mode=="券商即時報價檔" else "",max_age if mode in ("全市場盤中快照","券商即時報價檔","Yahoo 延遲盤中掃描") else None,st.session_state.get("yahoo_align16")))
+    snapshot_key=repr(("snapshot9",mode,period,grouping,str(taipei_now().date()),feed_path if mode=="券商即時報價檔" else "",max_age if mode in ("全市場盤中快照","券商即時報價檔","Yahoo 延遲盤中掃描") else None,st.session_state.get("yahoo_align16")))
     with st.spinner("讀取行情並套用顯示條件…"):
         try:
             universe=market_universe()
@@ -1929,7 +1947,7 @@ def _dashboard(width,height):
                     elif mode=="券商即時報價檔":local_quotes,errors,src=broker_quotes(feed_path,max_age=max_age)
                     else:local_quotes,errors,src,day,label=session_quote_snapshot(universe,max_age)
                     try:
-                        table,local_groups,excluded,count=multiday_market_tables(universe,local_quotes,period,max_age=max_age,closing_day=day)
+                        table,local_groups,excluded,count=multiday_market_tables(universe,local_quotes,period,max_age=max_age,closing_day=day,grouping=grouping)
                     except Exception as exc:
                         table=pd.DataFrame(columns=["趨勢","族群板塊","動能(%)","漲幅(%)","覆蓋","資料日"])
                         local_groups={};excluded=["RS計算未完成："+str(exc)];count=0
@@ -1962,14 +1980,14 @@ def _dashboard(width,height):
     sectors=all_sectors.copy()
     strong_count=int((all_sectors['動能(%)']>0).sum())
     total=len(universe) if mode!="原15族群多日" else len({t for a in sector_stocks.values() for t in a})
-    nsectors=15 if mode=="原15族群多日" else (universe.sector.nunique() if not universe.empty else 0)
+    nsectors=15 if mode=="原15族群多日" else (len(sector_groups(universe,grouping)) if not universe.empty else 0)
     price_text=f"{market_price:,.2f}" if market_price is not None else "—"
     initial_loading=bool(st.session_state.get('scan_jobs18',{}).get('active')) and not quotes
     rank_text='載入中' if initial_loading else f'{valid:,} / {total:,}'
     sector_text='—' if initial_loading else f'{strong_count} / {len(all_sectors)} / {nsectors}'
     ratio='—' if initial_loading else (f"{valid/total:.1%}" if total else "—")
     cards=[("加權指數 · "+escape(asof),price_text,""),("進入板塊排名 / 全市場",rank_text,"gold"),
-           ("強勢 / 有效 / 全產業",sector_text,""),(escape(effective_label)+" · 排名覆蓋",ratio,"")]
+           ("強勢 / 有效 / 全族群" if grouping=="產業鏈細分" else "強勢 / 有效 / 全產業",sector_text,""),(escape(effective_label)+" · 排名覆蓋",ratio,"")]
     kpi_html=lambda items:'<div class="metric-row">'+"".join(f'<div class="metric"><div class="metric-label">{label}</div><div class="metric-value {cls}">{value}</div></div>' for label,value,cls in items)+'</div>'
     if mobile:st.markdown(kpi_html(cards),unsafe_allow_html=True)   # 手機：2×2
     else:
@@ -1994,12 +2012,14 @@ def _dashboard(width,height):
             if missing:st.warning(str(missing[0]))
             if mode in ("全市場盤中快照","券商即時報價檔"):st.caption("盤中來源失敗不改用昨收；盤後改讀正式收盤資料。尚無成功結果時，請確認來源或稍後更新。")
         elif strategy:
-            pool=sectors[sectors["族群板塊"].isin(xiao_panel.xs.PREFERRED)] if focus=="偏好族群" else sectors
+            pool=sectors[sectors["族群板塊"].map(industry_chain.is_preferred)] if focus=="偏好族群" else sectors
             top,picks=strongest_picks(pool,groups,catalog,quotes,periods,n_sec=10,n=5)
             states={}
             if not picks.empty:
                 srs=dict(zip(top["族群板塊"],top["動能(%)"]))
-                cands=[dict(code=r["代號"],ticker=r["_ticker"],name=r["名稱"],sector=r["_sector"],sector_rs=float(srs[r["_sector"]]),stock_rs=float(r["動能(%)"]))
+                official=dict(zip(universe.code,universe.sector))
+                cands=[dict(code=r["代號"],ticker=r["_ticker"],name=r["名稱"],sector=r["_sector"],official=official.get(r["代號"],""),
+                            sector_rs=float(srs[r["_sector"]]),stock_rs=float(r["動能(%)"]))
                        for r in picks.drop_duplicates("代號").to_dict("records")]
                 with st.spinner("計算前十強板塊個股的日線量價狀態…"):
                     try:states,sig_stamp=xiao_panel.scan_states(cands)
