@@ -48,6 +48,10 @@ CSS = """<style>
 .sig-muted{background:#141b25;color:#6f7d90;border:1px solid #263140}
 .sig-cards.six{grid-template-columns:repeat(6,minmax(0,1fr))}.sig-cards.six .sig-card b{font-size:19px!important;white-space:nowrap}
 .sig-warn{background:#3d2a12;color:#ffc46b;border:1px solid #8a5a1c;flex:none}
+.sig-hint{display:inline-block;border-radius:12px;padding:1px 8px;font-size:13px;white-space:nowrap;flex:none;cursor:help;
+background:#241f38;color:#d2c3ff;border:1px solid #5b4a8f;margin:2px 4px 0 0}
+.sig-hint.up{background:#3a1d22;color:#ffb3b5;border-color:#8a3f45}
+.sig-card em{display:block;font-style:normal;font-size:13px;color:#b9a9f0;margin-top:1px;white-space:nowrap}
 .sig-ev{color:#9fb0c4;font-size:12px;white-space:normal;margin-top:3px;line-height:1.35;max-width:300px}
 .sig-sel td{background:#2a2b24!important}.sig-ok{color:#f17c7e}.sig-no{color:#55667a}
 .sig-note{font-size:12px;color:#7f8ea3;margin-top:6px}
@@ -222,7 +226,8 @@ def _live_v2(cands):
         checks["偏好族群"] = pref
         rows.append({"date": last.date(), "code": c["code"], "name": c["name"], "sector": c["sector"], "state": st_["state"],
                      "close": x.c.iat[-1], "stop": st_["stop"], "high": st_["high"], "sec_rank": rank.get(t, np.nan),
-                     "futures": "", "note": st_["note"], "warn": st_["warn"], "mkt_bull": mkt_bull, "checks": checks,
+                     "futures": "", "note": st_["note"], "warn": st_["warn"], "hints": st_["hints"],
+                     "idx_below3": bool(x.idx_below3.iat[-1]), "mkt_bull": mkt_bull, "checks": checks,
                      "marks": _marks(x, pref)})
     return pd.DataFrame(rows), stamp
 
@@ -255,6 +260,20 @@ def state_label(row):
     return SHORT.get((row or {}).get("state"), "—")
 
 
+def hint_badges(hints, skip=()):
+    """老師參考提醒徽章（紫＝偏空提醒、紅＝偏多）；滑鼠移上去看說明與回測結論。"""
+    if not isinstance(hints, str) or not hints:
+        return ""
+    out = ""
+    for k in hints.split("、"):
+        if k in skip:
+            continue
+        who, side, help_ = xs.HINTS.get(k, ("", "down", ""))
+        tip = f"{'林教授' if who == '林' else '廖崧沂 2.0'}參考提醒：{help_}"
+        out += f'<span class="sig-hint{" up" if side == "up" else ""}" title="{escape(tip)}">{escape(who)}｜{escape(k)}</span>'
+    return out
+
+
 def render_status(row, stamp):
     """K 線上方的訊號狀態列：狀態、說明、停損／攻擊高點、條件逐項。"""
     if not row:
@@ -269,6 +288,7 @@ def render_status(row, stamp):
     note = escape(str(row["note"])) if isinstance(row.get("note"), str) and row["note"] else "—"
     warn = row.get("warn") if isinstance(row.get("warn"), str) else ""
     warn_html = f'<span class="sig-badge sig-warn" title="持股出場警示">⚠ {escape(warn)}</span>' if warn else ""
+    warn_html += hint_badges(row.get("hints"))
     st.markdown(f'<div class="sx-bar"><div class="sx-top"><span class="sig-badge {cls}">{label}</span>{warn_html}<span class="sx-note" title="{note}">{note}</span>'
                 + "".join(f'<span class="sx-num"><i>{a}</i>{b}</span>' for a, b in nums)
                 + f'</div><div class="sx-chips">{chips}<span class="sx-stamp">日線 {row["date"]} · 取得 {escape(stamp)}</span></div></div>',
@@ -292,7 +312,7 @@ def _fwd_table(fwd, height):
         st.markdown('<div class="sig-note">尚無紀錄。排程每個交易日 14:45 執行，出現訊號（且大盤為多頭）時才會記錄；累積 2～3 個月才有參考價值。</div>', unsafe_allow_html=True)
         return
     fwd = fwd.sort_values("date", ascending=False)
-    head = "".join(f"<th>{h}</th>" for h in ["訊號日", "代號", "名稱", "進場（收盤）", "停損", "狀態", "毛報酬%", "扣現股成本%", "持有天", "出場原因"])
+    head = "".join(f"<th>{h}</th>" for h in ["訊號日", "代號", "名稱", "進場（收盤）", "停損", "狀態", "毛報酬%", "扣現股成本%", "持有天", "出場原因／提醒"])
     body = ""
     for r in fwd.itertuples():
         g = float(getattr(r, "ret_gross", 0) or 0) * 100
@@ -302,7 +322,8 @@ def _fwd_table(fwd, height):
         why = getattr(r, "exit_reason", "")
         body += (f"<tr><td>{str(r.date)[:10]}</td><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{_fmt(r.close)}</td>"
                  f"<td>{_fmt(r.stop)}</td><td>{escape(str(r.status))}</td><td{cls}>{_fmt(g, 2, True)}</td><td>{_fmt(net, 2, True)}</td>"
-                 f"<td>{_fmt(r.days, 0)}</td><td>{escape(why) if isinstance(why, str) else ''}</td></tr>")
+                 f"<td>{_fmt(r.days, 0)}</td><td style=\"white-space:normal;min-width:150px;max-width:230px\">"
+                 f"{escape(why) if isinstance(why, str) else ''}{hint_badges(getattr(r, 'hints', ''))}</td></tr>")
     st.markdown(f'<div class="sig-wrap" style="max-height:{height}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
 
 
@@ -329,17 +350,24 @@ def render_v2(cands, selected_code, workspace):
     f3, f2 = _read_csv("forward_status_v3.csv"), _read_csv("forward_status.csv")
     t3, c3, s3 = _fwd_stats(f3)
     bull_txt = "—" if bull is None else ("多頭（可做多）" if bull else "空頭（不做多）")
+    below3 = scan["idx_below3"].iloc[0] if "idx_below3" in scan and not scan.empty else None
+    liao_txt = "" if below3 is None or below3 != below3 else (
+        '<em title="廖崧沂 2.0：加權指數在 8、21、55 日均線全部之下才不做多（參考，現行仍用 60MA）">'
+        + ("2.0：在 8/21/55 之下" if bool(below3) else "2.0：未全破 8/21/55") + "</em>")
     st.markdown(f'<div class="sig-head"><b>蕭氏日線訊號 · 前瞻紀錄</b><span>資料日 {asof} · {escape(source)}</span></div>', unsafe_allow_html=True)
-    cards = [("大盤濾網", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
+    cards = [("大盤濾網（60MA）", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
              ("量縮整理／波段進行中", f"{n('setup')}／{n('wave')}"), ("v3 紀錄（已出場）", f"{t3}（{c3}）"), ("v3 前瞻勝率／平均", s3)]
-    st.markdown('<div class="sig-cards six">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b></div>'
-                                                        for a, b in cards) + "</div>", unsafe_allow_html=True)
+    st.markdown('<div class="sig-cards six">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b>'
+                                                        + (liao_txt if i == 0 else "") + "</div>"
+                                                        for i, (a, b) in enumerate(cards)) + "</div>", unsafe_allow_html=True)
     head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "族群內", "股期"])
     body = ""
     for r in today.itertuples():
         label, cls, _ = V2_STATE.get(r.state, (r.state, "sig-idle", 9))
         sel = ' class="sig-sel"' if str(r.code) == str(selected_code) else ""
         note = f'<div class="sig-ev">{escape(str(r.note))}</div>' if isinstance(r.note, str) and r.note else ""
+        hb = hint_badges(getattr(r, "hints", ""), skip=("大盤破8/21/55",))   # 大盤提醒已在上方卡片
+        note += f"<div>{hb}</div>" if hb else ""
         fut = r.futures if isinstance(getattr(r, "futures", ""), str) and r.futures else "—"
         body += (f"<tr{sel}><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{escape(str(r.sector))}</td>"
                  f'<td><span class="sig-badge {cls}">{label}</span>{note}</td><td>{_fmt(r.close)}</td><td>{_fmt(r.stop)}</td>'
@@ -354,7 +382,9 @@ def render_v2(cands, selected_code, workspace):
     st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
                 '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出一半）。'
                 '回測 2015-20／2021-26 每筆平均 +1.8%／+2.1%（現股）、勝率約 36～40%；同時持有 5 檔年化約 5%／27%（大盤 8%／22%）。'
-                'v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。</div>', unsafe_allow_html=True)
+                'v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。<br>'
+                '<span class="sig-hint">紫色</span>／<span class="sig-hint up">紅色</span>徽章＝林教授、廖崧沂 2.0 的參考提醒（偏空／偏多），'
+                '不影響訊號與紀錄；滑鼠移到徽章上可看規則與回測結論。回測顯示當成固定出場規則會降低報酬，持股可當減碼或提高警覺的參考。</div>', unsafe_allow_html=True)
 
 
 # ======================= v1：盤中 15 分 K =======================

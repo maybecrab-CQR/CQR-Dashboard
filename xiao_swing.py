@@ -121,7 +121,52 @@ def add_v3(x, idx_close):
     x["self_strong"] = (x.c - x.l) >= 0.5 * (x.h - x.l)                      # 收在當日區間上半部（跟自己比，近似站上均價線）
     x["wave"] = (x.vma5 > x.vma13) & (x.vma5 > x.vma5.shift(1)) & (x.vma13 > x.vma13.shift(1))   # 波段攻擊量帶出潮汐量
     x["trend_vol"] = x.wave & (x.vma34 > x.vma34.shift(1))                  # 再帶出 34MV＝趨勢量能
+    x["idx_below3"] = (ic < ic.rolling(8).mean()) & (ic < ic.rolling(21).mean()) & (ic < ic.rolling(55).mean())
     return x
+
+
+# 林教授、廖崧沂 2.0 的參考提醒（docs 第十節）：回測當作規則沒有加分，只在面板上提示，不影響訊號。
+# 鍵＝面板顯示文字；值＝(老師, 方向 up/down, 說明)
+HINTS = {
+    "三盤突破": ("2.0", "up", "收盤高於前兩根最高、量大於前 4 根，且 8>21>55（2.0 的買點）。"
+                             "回測：當進場條件與 v3 差不多，僅供參考。"),
+    "三盤跌破": ("2.0", "down", "收盤跌破前兩根最低（2.0：這一波結束）。"
+                              "回測：當全部出場會砍掉大賺的單，持股可減碼參考，不必全出。"),
+    "破8MA且下彎": ("2.0", "down", "收盤跌破 8MA 且 8MA 下彎（2.0：賣出；站回且翻揚再買）。"
+                                "回測：當全部出場報酬變差，僅供參考。"),
+    "破大量關鍵K": ("2.0", "down", "收盤跌破最近一根大量紅K（量 ≥ 5MV 1.5 倍）的低點（2.0：結構被破壞）。"
+                                "回測：同時持有 10 檔略好、5 檔較差，僅供參考。"),
+    "買進隔天破低": ("林", "down", "昨天出現訊號，今天收黑K且跌破昨天低點，或收盤跌回昨天收盤（林教授：失敗就出）。"
+                                "回測：回撤明顯變小（5 檔 −29%→−17%），但報酬也變少，屬於取捨。"),
+    "大盤破8/21/55": ("2.0", "down", "加權指數同時在 8、21、55 日均線之下（2.0：不做多）。"
+                                  "現行濾網仍用 60MA：2.0 版設計期較好，驗證期沒有重現。"),
+}
+
+
+def teacher_hints(x, t=-1):
+    """最後一根日 K 觸發了哪些老師提醒（回傳 HINTS 的鍵）。"""
+    t = len(x) + t if t < 0 else t
+    if t < 60:
+        return []
+    o, h, l, c, v = x.o.values, x.h.values, x.l.values, x.c.values, x.v.values
+    out = []
+    if (c[t] > max(h[t - 1], h[t - 2]) and v[t] > v[t - 4:t].max() and c[t] > o[t]
+            and x.ma8.iat[t] > x.ma21.iat[t] > x.ma55.iat[t] and x.ma8.iat[t] > x.ma8.iat[t - 1]):
+        out.append("三盤突破")
+    if c[t] < min(l[t - 1], l[t - 2]):
+        out.append("三盤跌破")
+    if c[t] < x.ma8.iat[t] and x.ma8.iat[t] <= x.ma8.iat[t - 1]:
+        out.append("破8MA且下彎")
+    v5 = x.vma5.values
+    key = [j for j in range(t - 20, t) if c[j] > o[j] and v[j] >= 1.5 * v5[j - 1]]
+    if key and c[t] < l[key[-1]]:
+        out.append("破大量關鍵K")
+    sig_y = {i for i, _ in entries_wave(x, trend=True)} | {i for i, _ in entries_v2(x)}
+    if t - 1 in sig_y and ((c[t] < o[t] and l[t] < l[t - 1]) or c[t] < c[t - 1]):
+        out.append("買進隔天破低")
+    if "idx_below3" in x and bool(x.idx_below3.iat[t]):
+        out.append("大盤破8/21/55")
+    return out
 
 
 def after_climax(x, days=5):
@@ -190,6 +235,7 @@ def today_state3(x, preferred=True):
     if t >= 1 and x.v.iat[t - 1] >= 1.6 * x.vma5.iat[t - 2] and x.vma5.iat[t] < x.vma5.iat[t - 1] and x.h.iat[t] <= x.h.iat[t - 1]:
         warn.append("大量後量縮不見高")
     info["warn"] = "、".join(warn)
+    info["hints"] = "、".join(teacher_hints(x))
     sig = dict(entries_wave(x, trend=True))
     if t in sig and bool(x.mkt_bull.iat[t]):
         if preferred:
