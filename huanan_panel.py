@@ -30,27 +30,27 @@ CSS = """<style>
 .st-key-hn_pair [data-testid="stHorizontalBlock"]{gap:4px!important}
 .st-key-hn_sell div button:hover{filter:brightness(1.12)}
 @media(max-width:1500px){.st-key-hn_sell div button p,.st-key-hn_buy div button p{font-size:17px!important}.hn-name{font-size:24px!important}}.st-key-hn_buy div button:hover{filter:brightness(1.12)}
-.hn-head{display:flex;align-items:center;gap:10px;height:auto}.hn-name{font-size:27px;font-weight:700;line-height:1.2;color:#eef1f6;white-space:nowrap}
+.hn-head{display:flex;align-items:center;gap:10px;height:auto}.hn-name{font-size:27px;font-weight:700;line-height:1.2;color:#f3eee2;white-space:nowrap}
 .hn-pill{display:inline-block;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:650;white-space:nowrap}
-.hn-pill.paper{background:#1f3a31;color:#9fe2c6;border:1px solid #2f7a5f}.hn-pill.live{background:#4a1f22;color:#ffb3b5;border:1px solid #a8474b}.hn-pill.off{background:#1a2431;color:#8fa0b6;border:1px solid #344353}
-.hn-note{color:#8fa0b6;font-size:13px}
+.hn-pill.paper{background:#1f3a31;color:#9fe2c6;border:1px solid #2f7a5f}.hn-pill.live{background:#4a1f22;color:#ffb3b5;border:1px solid #a8474b}.hn-pill.off{background:#1d1b16;color:#9a9383;border:1px solid #3d3527}
+.hn-note{color:#9a9383;font-size:13px}
 [data-testid="stDialog"] [data-testid="stBaseButton-primaryFormSubmit"] p{color:#15110a!important;font-weight:700;font-size:17px}
-.st-key-hn_ticket_panel{position:fixed!important;top:238px;right:26px;width:min(500px,46vw);z-index:1000;background:#101823!important;border:1px solid #67583b!important;border-radius:12px!important;padding:14px 16px 12px!important;box-shadow:0 18px 44px rgba(0,0,0,.6)}
+.st-key-hn_ticket_panel{position:fixed!important;top:238px;right:26px;width:min(500px,46vw);z-index:1000;background:#100f0e!important;border:1px solid #67583b!important;border-radius:12px!important;padding:14px 16px 12px!important;box-shadow:0 18px 44px rgba(0,0,0,.6)}
 .hn-ticket-title{font-size:19px;font-weight:700;margin-bottom:4px}.hn-ticket-title.buy{color:#f17c7e}.hn-ticket-title.sell{color:#55c8a4}
-.hn-ticket-sum{background:#1a2431;border-radius:8px;padding:9px 12px;color:#dbe3ee;font-size:15px;line-height:1.7;margin:6px 0 8px}
+.hn-ticket-sum{background:#1d1b16;border-radius:8px;padding:9px 12px;color:#dbe3ee;font-size:15px;line-height:1.7;margin:6px 0 8px}
 .hn-ticket-sum b{color:#f1d9a0}
 .st-key-hn_confirm_B div button{background:linear-gradient(#cc5559,#a13d42)!important;border:1px solid #f17c7e!important;color:#fff!important;font-weight:700}
 .st-key-hn_confirm_S div button{background:linear-gradient(#2f9a7b,#1f6e57)!important;border:1px solid #55c8a4!important;color:#fff!important;font-weight:700}
 .acct-cards{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:2px 0 12px}
-.acct-card{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:10px;padding:10px 14px;min-width:0}
-.acct-card span{display:block;color:#929fb1;font-size:13px;white-space:nowrap}.acct-card b{display:block;font-size:22px;font-weight:600;color:#e8edf6;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct-title{font-size:17px;font-weight:650;color:#e7ecf4;margin:12px 0 6px;display:flex;justify-content:space-between;align-items:baseline}.acct-title small{font-size:12px;color:#8490a2;font-weight:400}
-table.acct{width:100%;border-collapse:collapse;background:#0f1620;border:1px solid #293442;border-radius:10px;overflow:hidden;font-size:15px}
-table.acct th{background:#18212d;color:#aebacb;font-weight:500;text-align:right;padding:9px 10px;border-bottom:1px solid #2c3746;white-space:nowrap}
-table.acct td{text-align:right;padding:8px 10px;border-bottom:1px solid #1c2633;color:#cbd4e1;font-variant-numeric:tabular-nums;white-space:nowrap}
-table.acct th:first-child,table.acct td:first-child{text-align:left}table.acct tr:nth-child(odd) td{background:#101721}table.acct tr:hover td{background:#202b37}
-table.acct .empty{text-align:center;color:#8490a2;padding:18px}.acct-up{color:#f17c7e!important}.acct-down{color:#55c8a4!important}
-.acct-gate{border:1px dashed #344353;border-radius:12px;padding:30px;text-align:center;color:#9fb0c4;font-size:16px;margin-top:10px}
+.acct-card{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:10px 14px;min-width:0}
+.acct-card span{display:block;color:#9b9484;font-size:13px;white-space:nowrap}.acct-card b{display:block;font-size:22px;font-weight:600;color:#f0eadb;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-title{font-size:17px;font-weight:650;color:#efe9da;margin:12px 0 6px;display:flex;justify-content:space-between;align-items:baseline}.acct-title small{font-size:12px;color:#8e8778;font-weight:400}
+table.acct{width:100%;border-collapse:collapse;background:#0e0d0c;border:1px solid #332d21;border-radius:10px;overflow:hidden;font-size:15px}
+table.acct th{background:#1b1914;color:#aebacb;font-weight:500;text-align:right;padding:9px 10px;border-bottom:1px solid #352f22;white-space:nowrap}
+table.acct td{text-align:right;padding:8px 10px;border-bottom:1px solid #1f1d18;color:#cbd4e1;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.acct th:first-child,table.acct td:first-child{text-align:left}table.acct tr:nth-child(odd) td{background:#0f0e0d}table.acct tr:hover td{background:#25221b}
+table.acct .empty{text-align:center;color:#8e8778;padding:18px}.acct-up{color:#f17c7e!important}.acct-down{color:#55c8a4!important}
+.acct-gate{border:1px dashed #3d3527;border-radius:12px;padding:30px;text-align:center;color:#a8a191;font-size:16px;margin-top:10px}
 @media(max-width:1100px){.acct-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>"""
 
@@ -260,7 +260,7 @@ _ticket_idle = st.fragment(_ticket)
 def _ticket_panel(side, product, info, bid, ask):
     word, cls = ("買進", "buy") if side == "B" else ("賣出", "sell")
     with st.container(key="hn_ticket_panel", border=True):
-        st.markdown(f'<div class="hn-ticket-title {cls}">{word} {escape(product["desc"])} <span style="color:#cbb57e;font-size:15px">{escape(product["id"])}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="hn-ticket-title {cls}">{word} {escape(product["desc"])} <span style="color:#cfae5c;font-size:15px">{escape(product["id"])}</span></div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         ptype = c1.segmented_control("價格類型", list(PRICE_TYPE), default="限價", key="hn_ptype") or "限價"
         eff_options = list(EFF) if ptype == "限價" else ["IOC", "FOK"]
