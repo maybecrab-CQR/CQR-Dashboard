@@ -52,6 +52,18 @@ CSS = """<style>
 background:#241f38;color:#d2c3ff;border:1px solid #5b4a8f;margin:2px 4px 0 0}
 .sig-hint.up{background:#3a1d22;color:#ffb3b5;border-color:#8a3f45}
 .sig-card em{display:block;font-style:normal;font-size:13px;color:#b9a9f0;margin-top:1px;white-space:nowrap}
+.hist-stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:2px 0 6px}
+.hist-stats>div{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:9px;padding:5px 10px;min-width:0}
+.hist-stats span{display:block;font-size:13px;color:#929fb1}.hist-stats b{font-size:18px;color:#e8edf6;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-rule{font-size:13px;color:#8fa0b6;line-height:1.4;margin:0 0 6px;height:86px;overflow:auto}.hist-rule b{color:#cfb679;margin-right:6px;font-weight:600}
+.hist-head{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:10px;padding:6px 12px;margin:0 0 6px;height:72px;overflow:hidden}
+.hist-title{display:flex;align-items:baseline;gap:8px;font-size:15px;color:#9fb0c4;white-space:nowrap}.hist-title b{font-size:19px;color:#eef2f8}
+.hist-title i{font-style:normal;font-size:13px;color:#7f8fa3}.hist-title em{margin-left:auto;font-style:normal;font-size:20px;font-weight:700}
+.hist-legs{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c9d3e0;line-height:1.45;font-variant-numeric:tabular-nums}
+.hist-legs span{color:#cfb679;margin-right:5px}
+.hist-head .up{color:#f17c7e}.hist-head .down{color:#55c8a4}
+.sig-guide{font-size:14px;color:#aebbd0;margin:2px 0 6px;line-height:1.5}.sig-guide b{color:#ffb3b5}.sig-guide i{font-style:normal;color:#efc979}
+@media(max-width:1100px){.hist-stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .sig-ev{color:#9fb0c4;font-size:12px;white-space:normal;margin-top:3px;line-height:1.35;max-width:300px}
 .sig-sel td{background:#2a2b24!important}.sig-ok{color:#f17c7e}.sig-no{color:#55667a}
 .sig-note{font-size:12px;color:#7f8ea3;margin-top:6px}
@@ -327,8 +339,8 @@ def _fwd_table(fwd, height):
     st.markdown(f'<div class="sig-wrap" style="max-height:{height}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
 
 
-def render_v2(cands, selected_code, workspace):
-    """前瞻紀錄頁：今日全市場訊號（排程掃描）＋ v3／v2 前瞻紀錄。"""
+def render_v2(cands, selected_code, workspace, history=None):
+    """前瞻紀錄頁：今日觀察（訊號與量縮整理）／回測紀錄（history 回呼，由 app 繪製表格與 K 線）／前瞻紀錄。"""
     scan, source = _read_csv("latest_scan.csv"), "排程掃描（全市場，每個交易日 14:45 更新）"
     if scan is None:
         if not cands:
@@ -354,12 +366,33 @@ def render_v2(cands, selected_code, workspace):
     liao_txt = "" if below3 is None or below3 != below3 else (
         '<em title="廖崧沂 2.0：加權指數在 8、21、55 日均線全部之下才不做多（參考，現行仍用 60MA）">'
         + ("2.0：在 8/21/55 之下" if bool(below3) else "2.0：未全破 8/21/55") + "</em>")
-    st.markdown(f'<div class="sig-head"><b>蕭氏日線訊號 · 前瞻紀錄</b><span>資料日 {asof} · {escape(source)}</span></div>', unsafe_allow_html=True)
+    tcol, vcol = st.columns([1.25, 1], gap="small", vertical_alignment="center")
+    with vcol:
+        view = st.segmented_control("前瞻頁面", ["今日觀察", "回測紀錄", "前瞻紀錄"], default="今日觀察", key="fwd_view",
+                                    label_visibility="collapsed") or "今日觀察"
+    with tcol:
+        st.markdown(f'<div class="sig-head"><b>蕭氏日線訊號</b><span title="{escape(source)}">資料日 {asof} · '
+                    f'{"排程掃描" if "排程" in source else "即時計算（候選股）"}</span></div>', unsafe_allow_html=True)
+    if view == "回測紀錄":
+        if history is not None:
+            history(max(420, workspace - 50))
+        return
     cards = [("大盤濾網（60MA）", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
              ("量縮整理／波段進行中", f"{n('setup')}／{n('wave')}"), ("v3 紀錄（已出場）", f"{t3}（{c3}）"), ("v3 前瞻勝率／平均", s3)]
     st.markdown('<div class="sig-cards six">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b>'
                                                         + (liao_txt if i == 0 else "") + "</div>"
                                                         for i, (a, b) in enumerate(cards)) + "</div>", unsafe_allow_html=True)
+    avail = max(360, workspace - 140)
+    if view == "前瞻紀錄":
+        which = st.segmented_control("前瞻紀錄", ["v3 波段量啟動", "v2 凹洞量轉折"], default="v3 波段量啟動", key="fwd_which",
+                                     label_visibility="collapsed") or "v3 波段量啟動"
+        st.markdown('<div class="sig-guide">本機排程每天 14:45 實際記下的訊號（不是回測），用同一套出場規則追蹤到今天；'
+                    '這才是真正的樣本外成績。紫／紅徽章＝老師參考提醒。</div>', unsafe_allow_html=True)
+        _fwd_table(f3 if which.startswith("v3") else f2, avail - 50)
+        return
+    st.markdown('<div class="sig-guide"><b>v3／v2 訊號</b>＝今天收盤可買（停損欄是失敗出場價）；'
+                '<i>量縮整理中</i>＝放入觀察，等它轉成訊號才買，不要提前進場。'
+                '波段進行中的股票不列在這裡（已經在漲，未持有不追）。</div>', unsafe_allow_html=True)
     head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "族群內", "股期"])
     body = ""
     for r in today.itertuples():
@@ -374,17 +407,13 @@ def render_v2(cands, selected_code, workspace):
                  f"<td>{_fmt(r.high)}</td><td>{_fmt(r.sec_rank, 0)}</td><td>{escape(fut)}</td></tr>")
     if not body:
         body = '<tr><td class="empty" colspan="9">今天沒有訊號或量縮整理中的股票</td></tr>'
-    half = max(160, (workspace - 250) // 2)
-    st.markdown(f'<div class="sig-wrap" style="max-height:{half}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
-    which = st.segmented_control("前瞻紀錄", ["v3 波段量啟動", "v2 凹洞量轉折"], default="v3 波段量啟動", key="fwd_which",
-                                 label_visibility="collapsed") or "v3 波段量啟動"
-    _fwd_table(f3 if which.startswith("v3") else f2, half)
-    st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
-                '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出一半）。'
-                '回測 2015-20／2021-26 每筆平均 +1.8%／+2.1%（現股）、勝率約 36～40%；同時持有 5 檔年化約 5%／27%（大盤 8%／22%）。'
-                'v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。<br>'
-                '<span class="sig-hint">紫色</span>／<span class="sig-hint up">紅色</span>徽章＝林教授、廖崧沂 2.0 的參考提醒（偏空／偏多），'
-                '不影響訊號與紀錄；滑鼠移到徽章上可看規則與回測結論。回測顯示當成固定出場規則會降低報酬，持股可當減碼或提高警覺的參考。</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sig-wrap" style="max-height:{avail - 95}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
+    with st.expander("規則與徽章說明"):
+        st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
+                    '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出一半）。'
+                    '完整的歷史交易與績效見「回測紀錄」。v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。<br>'
+                    '<span class="sig-hint">紫色</span>／<span class="sig-hint up">紅色</span>徽章＝林教授、廖崧沂 2.0 的參考提醒（偏空／偏多），'
+                    '不影響訊號與紀錄；滑鼠移到徽章上可看規則與回測結論。回測顯示當成固定出場規則會降低報酬，持股可當減碼或提高警覺的參考。</div>', unsafe_allow_html=True)
 
 
 # ======================= v1：盤中 15 分 K =======================

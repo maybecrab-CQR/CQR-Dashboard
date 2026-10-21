@@ -242,7 +242,8 @@ def today_state3(x, preferred=True):
             info.update(state="signal3", rule="v3", stop=sig[t], high=x.h.iat[t], push_date=x.index[t],
                         note="波段量啟動：5MV 帶出 13MV、34MV 上揚，當天強於大盤（收盤可買，停損＝前 3 日低點）")
             return info
-        info["note"] = "波段量啟動，但非偏好族群（回測較弱，僅觀察）"
+        extra = "今天出現波段量啟動，但非偏好族群（回測較弱，不列入訊號）"
+        info["note"] = f"{info['note']}；{extra}" if info.get("note") else extra
     if base["state"] in ("signal", "setup"):
         return info
     if bool(x.wave.iat[t]) and x.c.iat[t] > x.ma21.iat[t]:

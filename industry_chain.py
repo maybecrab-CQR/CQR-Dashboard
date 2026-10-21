@@ -111,21 +111,65 @@ def chain_of(group_name):
     return group_name.split("｜")[-1]
 
 
-def groups(universe_codes, min_members=6):
+# 類似的產業鏈合併成大類（LEVEL="macro"）：47 條產業鏈 → 約 22 類
+MACRO = {
+    "半導體": ["半導體"],
+    "PCB與被動元件": ["印刷電路板", "被動元件", "連接器"],
+    "面板光電": ["平面顯示器", "觸控面板", "LED照明", "體驗科技"],
+    "電腦及週邊設備": ["電腦及週邊設備"],
+    "通信網路與衛星": ["通信網路", "太空衛星科技"],
+    "AI與雲端": ["人工智慧", "雲端運算", "大數據"],
+    "資安與軟體": ["資通訊安全", "軟體服務", "區塊鏈"],
+    "電商與金融科技": ["電子商務", "金融科技"],
+    "電機與自動化": ["電機機械", "自動化"],
+    "電網與傳統能源": ["智慧電網", "油電燃氣", "汽電共生", "能源元件"],
+    "太陽能與風電": ["太陽能", "風力發電"],
+    "電動車": ["電動車輛"],
+    "汽車": ["汽車"],
+    "鋼鐵": ["鋼鐵"],
+    "石化塑橡膠": ["石化及塑橡膠"],
+    "水泥建材營造": ["水泥", "建材營造"],
+    "造紙與紡織": ["造紙", "紡織"],
+    "食品": ["食品", "食品生技"],
+    "貿易百貨": ["貿易百貨"],
+    "休閒文創運動": ["休閒娛樂", "運動科技", "文化創意業"],
+    "製藥與再生醫療": ["製藥", "再生醫療"],
+    "醫療器材": ["醫療器材"],
+    "金融": ["金融"],
+    "交通運輸及航運": ["交通運輸及航運"],
+}
+MACRO_OF = {c: m for m, cs in MACRO.items() for c in cs}
+PREFERRED_MACRO = {"半導體", "PCB與被動元件", "面板光電", "電腦及週邊設備", "通信網路與衛星", "AI與雲端", "資安與軟體",
+                   "電機與自動化", "電網與傳統能源", "太陽能與風電", "電動車"}
+PREFERRED_CHAINS |= PREFERRED_MACRO
+
+# 族群粒度（環境變數 CQR_CHAIN_LEVEL 可覆蓋）：segment＝細項（約 280 個）、chain＝產業鏈（約 45 個）、macro＝合併大類（約 22 個）
+LEVEL = "segment"
+
+
+def groups(universe_codes, min_members=6, level=None):
     """回傳 {族群名: [代號...]}。
-    細項（例「PCB／銅箔基板」）在名單中有 ≥ min_members 檔就自成一個族群；不足的細項併回所屬產業鏈（例「PCB」）。
+    level=segment：細項（例「PCB／銅箔基板」）在名單中有 ≥ min_members 檔就自成一個族群；不足的細項併回所屬產業鏈。
+    level=chain：每條產業鏈一個族群。level=macro：類似的產業鏈合併成大類（MACRO）。
     同一族群內代號去重；一檔可屬於多個族群。"""
+    import os
+    level = level or os.environ.get("CQR_CHAIN_LEVEL") or LEVEL
     codes_in = frozenset(universe_codes)
-    key = ("groups", hash(codes_in), min_members)
+    key = ("groups", hash(codes_in), min_members, level)
     if key in _MEMO:
         return _MEMO[key]
     df = load()
     df = df[df.code.isin(codes_in) & (df.chain != "其他")]          # 「其他」是雜項，不當族群
     out = {}
-    for (chain, segment), g in df.groupby(["chain", "segment"]):
-        codes = sorted(set(g.code))
-        key = f"{short(segment)}｜{chain}" if len(codes) >= min_members else chain   # 細項在前：表格截斷時仍看得到
-        out.setdefault(key, set()).update(codes)
+    if level == "segment":
+        for (chain, segment), g in df.groupby(["chain", "segment"]):
+            codes = sorted(set(g.code))
+            name = f"{short(segment)}｜{chain}" if len(codes) >= min_members else chain   # 細項在前：表格截斷時仍看得到
+            out.setdefault(name, set()).update(codes)
+    else:
+        for chain, g in df.groupby("chain"):
+            name = chain if level == "chain" else MACRO_OF.get(chain, chain)
+            out.setdefault(name, set()).update(g.code)
     res = {k: sorted(v) for k, v in out.items() if len(v) >= 3}
     _MEMO[key] = res
     return res

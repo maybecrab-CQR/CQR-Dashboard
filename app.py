@@ -1349,6 +1349,126 @@ def chip_trend_html(rows,kind,mode,height):
 </style><script src="plotly.min.js"></script></head><body><div class="shell"><div class="caption">'''+caption+'''</div><div id="chip-graph" class="chart"></div><div class="table"><table><thead><tr>'''+heads+'''</tr></thead><tbody>'''+body+'''</tbody></table></div><div class="note">'''+notes+'''</div></div><script>const f='''+payload+''';Plotly.newPlot('chip-graph',f.data,f.layout,{responsive:true,displayModeBar:false,displaylogo:false});</script></body></html>'''
 
 
+HISTORY_FILE=Path(__file__).resolve().parent/"signal_history.csv"
+HISTORY_RULES={
+    "v3":("5MV 帶出 13MV 的第一天、34MV 上揚；站上並扣低 21MA、10 日強於大盤；族群強於大盤且排族群前三；當天收紅、強於大盤、收在上半部；只做電子／重電／綠能；大盤在 60MA 之上 → 當天收盤買",
+          "停損＝進場前 3 日最低；極限大量後量縮不見高先出一半；跌破停損、跌破 21MA、8／21MA 扣高且收破 8MA 全出；最多持有 60 天；出場訊號隔天開盤賣"),
+    "v2":("攻擊（量增價漲）後 2～12 天內回檔量縮、角度緩、守住攻擊日低點；凹洞量回升（量大於昨天與 5 天前）、收紅；尚未突破攻擊高點；大盤在 60MA 之上 → 當天收盤買",
+          "停損＝回檔低點；其餘同 v3"),
+}
+
+
+@st.cache_data(ttl=3600,show_spinner=False)
+def load_history(mtime):
+    df=pd.read_csv(HISTORY_FILE,dtype={"code":str},parse_dates=["signal_date","half_date","exit_date"])
+    return df
+
+
+@st.cache_data(ttl=3600,show_spinner=False)
+def trade_frame(ticker,start,end):
+    """回測紀錄的 K 線：取當時的實際股價（未還原），上市查不到再試上櫃。"""
+    for symbol in [ticker]+([ticker.removesuffix(".TW")+".TWO"] if ticker.endswith(".TW") else []):
+        try:
+            f=normalize(yf.Ticker(symbol).history(start=start,end=end,interval="1d",auto_adjust=False,timeout=20))
+            f=f[f.Volume>0] if "Volume" in f else f
+            if not f.empty:return f[["Open","High","Low","Close","Volume"]]
+        except Exception:
+            continue
+    return pd.DataFrame()
+
+
+def render_trade_history(height):
+    """前瞻紀錄頁 →「回測紀錄」：每一筆歷史交易（進出場日期、價格、原因、報酬），點選後在 K 線上標出進出場點。"""
+    if not HISTORY_FILE.exists():
+        st.info("尚未產生回測紀錄（本機執行 python research/export_history.py）。");return
+    df=load_history(HISTORY_FILE.stat().st_mtime)
+    c1,c2,c3=st.columns([1.5,1.3,1],gap="small",vertical_alignment="center")
+    with c1:kind=st.segmented_control("策略",["v3 波段量啟動","v2 凹洞量轉折"],default="v3 波段量啟動",key="hist_kind",label_visibility="collapsed") or "v3 波段量啟動"
+    periods={"近一年":365,"2021–26（驗證期）":"2021","2015–20（設計期）":"2015","全部":None}
+    with c2:per=st.selectbox("期間",list(periods),key="hist_period",label_visibility="collapsed")
+    with c3:res=st.selectbox("結果",["全部","獲利","虧損","持有中"],key="hist_result",label_visibility="collapsed")
+    k="v3" if kind.startswith("v3") else "v2"
+    g=df[df.strategy==k]
+    p=periods[per]
+    if p==365:g=g[g.signal_date>=pd.Timestamp(taipei_now().date())-pd.Timedelta(days=365)]
+    elif p=="2021":g=g[g.signal_date>="2021-01-01"]
+    elif p=="2015":g=g[g.signal_date<"2021-01-01"]
+    done=g[g.exit_reason!="持有中"];open_n=int((g.exit_reason=="持有中").sum())
+    if res=="獲利":g=g[(g.ret_net>0)&(g.exit_reason!="持有中")]
+    elif res=="虧損":g=g[(g.ret_net<=0)&(g.exit_reason!="持有中")]
+    elif res=="持有中":g=g[g.exit_reason=="持有中"]
+    win,lose=done.ret_net[done.ret_net>0],done.ret_net[done.ret_net<=0]
+    pf=(win.sum()/-lose.sum()) if lose.sum()<0 else float("nan")
+    stats=[("已出場",f"{len(done)} 筆"),("勝率",f"{(done.ret_net>0).mean()*100:.0f}%" if len(done) else "—"),
+           ("每筆平均",f"{done.ret_net.mean():+.2f}%" if len(done) else "—"),
+           ("平均賺／賠",f"{win.mean():+.1f}%／{lose.mean():+.1f}%" if len(win) and len(lose) else "—"),
+           ("獲利因子",f"{pf:.2f}" if pf==pf else "—"),("平均持有",f"{done.days.mean():.0f} 天" if len(done) else "—"),
+           ("持有中",f"{open_n} 筆")]
+    st.markdown('<div class="hist-stats">'+"".join(f'<div><span>{a}</span><b>{b}</b></div>' for a,b in stats)+'</div>',unsafe_allow_html=True)
+    rule_html=f'<div class="hist-rule"><b>進場</b>{escape(HISTORY_RULES[k][0])}<br><b>出場</b>{escape(HISTORY_RULES[k][1])}</div>'
+    if g.empty:
+        st.info("這個條件下沒有交易紀錄。");return
+    show=pd.DataFrame({"_i":g.index,"訊號日":g.signal_date.dt.strftime("%Y-%m-%d"),"名稱":g.name+" "+g.code,
+                       "進場":g.entry_price,"出場日":g.exit_date.dt.strftime("%m-%d"),"出場":g.exit_price,"天數":g.days,"報酬%":g.ret_net,"出場原因":g.exit_reason})
+    body_h=max(360,height-120)
+    left,right=st.columns([1.08,1],gap="small")
+    left.markdown(rule_html,unsafe_allow_html=True)
+    b=GridOptionsBuilder.from_dataframe(show)
+    b.configure_default_column(resizable=True,sortable=True,filter=False,suppressMovable=True,suppressHeaderMenuButton=True)
+    b.configure_selection("single",use_checkbox=False,pre_selected_rows=[0])
+    b.configure_grid_options(rowHeight=34,headerHeight=38,suppressCellFocus=True,animateRows=False,tooltipShowDelay=200,
+                             onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"))
+    b.configure_column("_i",hide=True)
+    num=JsCode("function(p){return p.value==null?'—':Number(p.value).toLocaleString('en-US',{minimumFractionDigits:p.value>=1000?0:2,maximumFractionDigits:p.value>=1000?0:2});}")
+    for col,w in (("訊號日",100),("名稱",112),("出場日",64),("天數",50)):
+        b.configure_column(col,width=w,minWidth=w-6,tooltipField=col)
+    for col in ("進場","出場"):
+        b.configure_column(col,width=72,minWidth=64,type=["numericColumn"],valueFormatter=num)
+    b.configure_column("出場原因",width=120,minWidth=90,flex=1,tooltipField="出場原因",
+        cellStyle=JsCode("function(p){return {color:p.value==='持有中'?'#9cc7f5':'#9fb0c4',fontSize:'14px'};}"))
+    b.configure_column("報酬%",width=72,minWidth=66,type=["numericColumn"],sort="desc" if res=="獲利" else None,
+        valueFormatter=JsCode("function(p){return (p.value>0?'+':'')+Number(p.value).toFixed(2);}"),
+        cellStyle=JsCode("function(p){return {color:p.value>0?'#f17c7e':p.value<0?'#55c8a4':'#c2cede',fontWeight:'600'};}"))
+    with left:
+        resp=AgGrid(show,gridOptions=b.build(),height=body_h-92,theme="alpine",update_on=["selectionChanged"],fit_columns_on_grid_load=True,
+            key=f"hist_grid_{k}_{per}_{res}_{body_h}",allow_unsafe_jscode=True,custom_css={
+                ".ag-root-wrapper":{"background-color":"#0f1620 !important","border":"1px solid #293442 !important","border-radius":"10px !important"},
+                ".ag-header":{"background-color":"#18212d !important","color":"#c3cedc !important","font-size":"14px !important"},
+                ".ag-row":{"background-color":"#101721 !important","color":"#dbe2ec !important","font-size":"15px !important","border-bottom":"1px solid #1c2633 !important"},
+                ".ag-row-odd":{"background-color":"#121b26 !important"},".ag-row-hover":{"background-color":"#202b37 !important"},
+                ".ag-row-selected":{"background-color":"#2a2b24 !important","border-left":"3px solid #cfb679 !important"},
+                ".ag-body-viewport":{"background-color":"#101721 !important"},
+                ".ag-cell,.ag-header-cell":{"padding-left":"5px !important","padding-right":"5px !important"}})
+    rows=resp.get("selected_rows")
+    i=None
+    if rows is not None and len(rows):i=int(rows.iloc[0]["_i"] if isinstance(rows,pd.DataFrame) else rows[0]["_i"])
+    r=df.loc[i] if i is not None and i in df.index else g.iloc[0]
+    sig,ex=r.signal_date,r.exit_date
+    frame=trade_frame(r.ticker,(sig-pd.Timedelta(days=200)).strftime("%Y-%m-%d"),
+                      min(ex+pd.Timedelta(days=40),pd.Timestamp(taipei_now().date())+pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
+    open_=r.exit_reason=="持有中"
+    half=f'　<span>出一半</span>{r.half_date:%m-%d} @ {r.half_price:,.2f}' if pd.notna(r.half_date) else ""
+    head=(f'<div class="hist-title"><b>{escape(r["name"])}</b> {escape(r.code)} <i>{escape(str(r.sector))}</i>'
+          f'<em class="{"up" if r.ret_net>0 else "down"}">{r.ret_net:+.2f}%</em></div>'
+          f'<div class="hist-legs"><div><span>進場</span>{sig:%Y-%m-%d} 收盤 {r.entry_price:,.2f}　<span>停損</span>{r.stop:,.2f}{half}</div>'
+          +(f'<div><span>持有中</span>{ex:%Y-%m-%d} 收盤 {r.exit_price:,.2f}・{r.days} 天（未扣成本）</div>' if open_ else
+            f'<div><span>出場</span>{ex:%Y-%m-%d} 開盤 {r.exit_price:,.2f}・{r.days} 天・{escape(r.exit_reason)}</div>')+'</div>')
+    right.markdown(f'<div class="hist-head">{head}</div>',unsafe_allow_html=True)
+    if frame.empty:
+        right.warning("這檔的歷史 K 線目前取不到（可能已下市或 Yahoo 暫時無資料）。");return
+    labels=frame.index.strftime("%Y-%m-%d")
+    d=lambda t:t.strftime("%Y-%m-%d")
+    marks=[(d(sig),"buy",f"進場 {r.entry_price:,.2f}")]
+    if pd.notna(r.half_date):marks.append((d(r.half_date),"half",f"出一半 {r.half_price:,.2f}"))
+    if not open_:marks.append((d(ex),"sell",f"出場 {r.exit_price:,.2f}"))
+    pos=list(labels)
+    start=pos.index(d(sig)) if d(sig) in pos else max(0,len(pos)-60)
+    view=max(40,len(pos)-max(0,start-20))
+    chart_h=max(300,body_h-78)
+    content=chart_html(frame,f"{r.ticker}-hist-{d(sig)}","1d",max(200,chart_h-150),tuple(marks),((float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a"),),view=view)
+    with right:interactive_chart_component()(html=content,height=chart_h,key=f"hist_chart_{r.ticker}_{d(sig)}",default=None)
+
+
 @st.fragment
 def render_chip_trends(code,name,ticker,market,kind,quote,workspace):
     title,count_col,mode_col=st.columns([2.8,1,1.4])
@@ -1471,8 +1591,9 @@ def plotly_bundle():
 
 
 @st.cache_data(ttl=300,show_spinner=False,max_entries=32)
-def chart_html(frame, ticker, interval, height=600, marks=(), levels=()):
-    """marks：((日期, 'v3'|'v2', 停損), ...) 歷史訊號標記；levels：((價格, 標籤, 顏色), ...) 水平參考線。只用在日 K。"""
+def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60):
+    """marks：((日期, 'v3'|'v2', 停損), ...) 歷史訊號標記；也可用 ((日期, 'buy'|'half'|'sell', 說明), ...) 標進出場點。
+    levels：((價格, 標籤, 顏色), ...) 水平參考線。只用在日 K。view：初始顯示的 K 棒數。"""
     df = indicators(frame)
     labels = df.index.strftime("%Y-%m-%d %H:%M" if interval.endswith("m") else "%Y-%m-%d").tolist()
     x = list(range(len(df)))  # 連續交易棒座標，週末與休市不佔空間
@@ -1499,6 +1620,16 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=()):
                 fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=[lo*0.985 for _,lo in pts],mode="markers",name=name,
                     marker=dict(symbol="triangle-up",size=13,color=color,line=dict(color="#0f1620",width=1)),
                     hovertemplate=name+"<extra></extra>"),row=1,col=1)
+        # 回測紀錄：進場（紅▲在低點下）、減半（橘▼）、出場（綠▼在高點上），旁邊標文字
+        for kind,color,symbol,name in (("buy","#ff5c5c","triangle-up","進場"),("half","#ffb347","triangle-down","出一半"),("sell","#3ddc97","triangle-down","出場")):
+            pts=[(pos[d],txt) for d,k,txt in marks if k==kind and d in pos]
+            if not pts:continue
+            up=kind=="buy"
+            ys=[float(df.Low.iloc[p])*0.97 if up else float(df.High.iloc[p])*1.03 for p,_ in pts]
+            fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=ys,mode="markers+text",name=name,text=[t for _,t in pts],
+                textposition="bottom center" if up else "top center",textfont=dict(color=color,size=14),
+                marker=dict(symbol=symbol,size=17,color=color,line=dict(color="#0f1620",width=1)),
+                hovertemplate="%{text}<extra></extra>"),row=1,col=1)
     if interval=="1d":
         for price,label,color in levels:
             if price and math.isfinite(price):
@@ -1529,7 +1660,7 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=()):
         return [None if pd.isna(v) else float(v) for v in series]
     meta = {"labels":labels,"open":values(df.Open),"high":values(df.High),"low":values(df.Low),"close":values(df.Close),
             "volume":values(df.Volume),"priceLines":[values(df[f"MA{n}"]) for n in (3,10,21,52)],
-            "volumeLines":[values(df[f"VMA{n}"]) for n in (5,13,34)],"key":f"cq-viewport-v2-{ticker}-{interval}","height":height,"timeframe":interval}
+            "volumeLines":[values(df[f"VMA{n}"]) for n in (5,13,34)],"key":f"cq-viewport-v2-{ticker}-{interval}","height":height,"timeframe":interval,"view":int(view)}
     template = CHART_TEMPLATE.replace("__FIGURE__",json.dumps(payload).replace("</","<\\/"))
     return template.replace("__META__",json.dumps(meta).replace("</","<\\/"))
 
@@ -1554,7 +1685,7 @@ const f=__FIGURE__, m=__META__, g=document.getElementById('chart'), N=m.labels.l
 const tf=document.getElementById('timeframe');tf.value=({'1d':'日K','1wk':'周K','1mo':'月K','1m':'1分','15m':'15分','30m':'30分','60m':'60分'})[m.timeframe];tf.onchange=()=>parent.postMessage({type:'cq-timeframe',value:tf.value},'*');
 let autoY=true, showDeduct=true, pending=false, raf=0, follow=true;
 const baseAnnotations=f.layout.annotations||[];
-const initial=[Math.max(-.7,N-Math.min(60,N)-.7),N+1.5];
+const initial=[Math.max(-.7,N-Math.min(m.view||60,N)-.7),N+1.5];
 let current=initial.slice();
 try{const v=JSON.parse(localStorage.getItem(m.key));if(v && Array.isArray(v.range) && v.range.every(Number.isFinite)){follow=v.follow!==false;if(follow){const w=v.range[1]-v.range[0];current=[N+1.5-w,N+1.5];}else if(v.last===m.labels[N-1])current=v.range;}}catch(e){}
 function clamp(r){const width=Math.max(Math.min(8,N)+1,Math.min(N+2.2,r[1]-r[0]));let a=Math.max(-.7,Math.min(r[0],N+1.5-width));return [a,a+width];}
@@ -2207,7 +2338,7 @@ def _dashboard(width,height):
             elif panel=="前瞻紀錄":
                 # 有排程掃描檔就直接讀；沒有（例如雲端）才即時算候選股
                 has_scan=(xiao_panel.LOG_DIR/"latest_scan.csv").exists()
-                xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace)
+                xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace,history=render_trade_history)
             elif panel=="板塊選股":
                 if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
                 else:st.markdown(f'<div class="stock-head"><h2>{escape(name)}</h2><span class="stock-code">{escape(code)}</span></div>',unsafe_allow_html=True)
