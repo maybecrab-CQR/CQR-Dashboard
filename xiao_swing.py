@@ -3,7 +3,7 @@
 三邊都用這裡的函式，確保規則一模一樣。規則出處見 docs/蕭明道量價規則整理.md。
 
 v2 精神：不追突破，在「攻擊（量增價漲）→ 回檔量縮價穩 → 凹洞量回升」的轉折點買；
-良性回檔抱住，極限大量後量縮不見高先出一半，跌破 21MA／均線扣高反轉／跌破回檔低點全出。
+良性回檔抱住，極限大量後量縮不見高先出 1/3（PART_EXIT），跌破 21MA／均線扣高反轉／跌破回檔低點全出。
 """
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ import xiao_rules as xr
 P = dict(min_price=50, min_value=3e8)
 # 型態與出場參數（依影片與 2015-2020 設計期決定）
 Q = dict(push_min=2, push_max=12, attack=1.5, pull_vol=0.7, spike=3.0, climax=2.5, top_in_sector=3, big=2.0)
-MAX_HOLD = 60
+MAX_HOLD = None   # 不設持有天數上限：漲時不預設頂，只依出場訊號離場（原為 60 天）
 
 
 # ---------------------------------------------------------------- 指標
@@ -138,6 +138,10 @@ HINTS = {
                                 "回測：同時持有 10 檔略好、5 檔較差，僅供參考。"),
     "買進隔天破低": ("林", "down", "昨天出現訊號，今天收黑K且跌破昨天低點，或收盤跌回昨天收盤（林教授：失敗就出）。"
                                 "回測：回撤明顯變小（5 檔 −29%→−17%），但報酬也變少，屬於取捨。"),
+    "熄火量": ("蕭", "down", "昨天量增價漲收紅，今天量縮到 13MV（潮汐量）之下（蕭老師貼圖「熄火量」；影片 tMtiBEdCcpE）。"
+                          "回測：當全部出場報酬變差（每筆 +1.47%→+0.56%），僅供參考。"),
+    "量價背離": ("蕭", "down", "價格比前一波高，但這一波 5MV 高點比前一波低，且 5MV 今天轉折向下（蕭老師貼圖「絕對大量相對高價」"
+                            "「多方小心」；影片 QTRPMp5Crrw）。回測：當全部出場報酬變差（每筆 +1.47%→+0.94%），僅供參考。"),
     "大盤破8/21/55": ("2.0", "down", "加權指數同時在 8、21、55 日均線之下（2.0：不做多）。"
                                   "現行濾網仍用 60MA：2.0 版設計期較好，驗證期沒有重現。"),
 }
@@ -164,6 +168,15 @@ def teacher_hints(x, t=-1):
     sig_y = {i for i, _ in entries_wave(x, trend=True)} | {i for i, _ in entries_v2(x)}
     if t - 1 in sig_y and ((c[t] < o[t] and l[t] < l[t - 1]) or c[t] < c[t - 1]):
         out.append("買進隔天破低")
+    v13 = x.vma13.values
+    if c[t - 1] > o[t - 1] and c[t - 1] > c[t - 2] and v[t - 1] > v[t - 2] and v[t] < v13[t]:
+        out.append("熄火量")
+    if v5[t] < v5[t - 1] and v5[t - 1] >= v5[t - 2]:              # 今天 5MV 轉折向下：與前一次 5MV 轉折比較
+        prev = [j for j in range(t - 40, t - 3) if v5[j] < v5[j - 1] and v5[j - 1] >= v5[j - 2]]
+        if prev:
+            p = prev[-1]
+            if h[max(0, t - 5):t + 1].max() > h[max(0, p - 5):p + 1].max() and v5[t - 1] < v5[p - 1]:
+                out.append("量價背離")
     if "idx_below3" in x and bool(x.idx_below3.iat[t]):
         out.append("大盤破8/21/55")
     return out
@@ -292,18 +305,41 @@ def entries_v2(x):
 
 
 # ---------------------------------------------------------------- 出場
-def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False):
-    """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。資料不夠時最後一筆為「持有中」。
+# 極限大量後量縮不見高先出的比例：0.5＝出一半、1/3＝出三分之一、1.0＝全出（之後符合條件再重新進場）
+# 2026-10-22 改為 1/3：設計期每筆 +1.47%→+1.61%、驗證期 +2.08%→+2.27%，兩期的 5／10 檔年化都較高（docs 10.9）
+PART_EXIT = 1 / 3
+HALF_EXIT = PART_EXIT < 1                       # 舊名稱相容
+
+
+def _part_label(p):
+    return "全部出場" if p >= 0.999 else ("出一半" if abs(p - 0.5) < 1e-6 else ("出 1/3" if abs(p - 1 / 3) < 1e-6 else f"出 {p:.0%}"))
+
+
+def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False, fire=False, diverge=False, half=None, part=None):
+    """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。沒有出場訊號時最後一筆為「持有中」。
+    max_hold=None（預設）：不設持有天數上限（漲時不預設頂），只依出場訊號離場。
     climax_rule：'avg20'＝量 ≥ 前 20 日均量 2.5 倍（預設）；'mv5'＝量 ≥ 前一日 5MV 的 160%（影片：波段攻擊量的 160%）。
-    tide_exit：13MV（潮汐量）由升轉降的那天全部出場（影片：13MV 轉折＝絕項的項，八成是波段高點）。"""
+    tide_exit：13MV（潮汐量）由升轉降的那天全部出場（影片：13MV 轉折＝絕項的項，八成是波段高點）。
+    fire：熄火量全出（貼圖「熄火量」；影片 tMtiBEdCcpE：量增價漲長紅後，下一根量縮到潮汐量 13MV 之下＝熄火量）。
+    diverge：量價背離全出（貼圖「絕對大量相對高價／相對大量絕對高價」；影片 QTRPMp5Crrw、KIXbeDdFJ4c：
+             價格創新高，但這一波 5MV 高點低於前一波 5MV 高點）。"""
     n = len(x)
+    end = n - 1 if max_hold is None else min(e + max_hold, n - 1)
     legs, left, climax, maxv = [], 1.0, None, x.v.iat[e]
-    v13 = x.vma13.values if tide_exit else None
-    for j in range(e, min(e + max_hold, n - 1)):
+    v13 = x.vma13.values if (tide_exit or fire) else None
+    v5, hh, cc, oo, vv = x.vma5.values, x.h.values, x.c.values, x.o.values, x.v.values
+    peaks = []                                           # 進場後每一波 5MV 高點：(5MV, 該波最高價)
+    if part is None:
+        part = PART_EXIT if half is None else (0.5 if half else 1.0)
+    sold = False                                         # 減碼只做一次（與原本「出一半」相同）
+    for j in range(e, end):
         c, v = x.c.iat[j], x.v.iat[j]
-        if climax is not None and left > 0.5 and v < x.v.iat[climax] and x.h.iat[j] <= x.h.iat[climax]:
-            legs.append((j + 1, 0.5, "極限大量後量縮不見高（出一半）"))      # 影片10：黃燈之後不見高
-            left = 0.5
+        if climax is not None and not sold and v < x.v.iat[climax] and x.h.iat[j] <= x.h.iat[climax]:
+            if part >= 0.999:
+                legs.append((j + 1, left, "極限大量後量縮不見高"))           # 全部出場，之後符合條件再重新進場
+                return legs
+            legs.append((j + 1, part, f"極限大量後量縮不見高（{_part_label(part)}）"))   # 影片10：黃燈之後不見高
+            left, sold = 1.0 - part, True
         big = v >= Q["climax"] * x.avgv.iat[j] if climax_rule == "avg20" else v >= 1.6 * x.vma5.iat[j - 1]
         if big and v >= maxv:
             climax = j                                                       # 自下而上區間的極限大量
@@ -317,10 +353,17 @@ def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=Fals
             reason = "跌破21MA"
         elif (not x.ma8_up.iat[j]) and (not x.ma21_up.iat[j]) and c < x.ma8.iat[j]:
             reason = "均線扣高反轉"
+        elif fire and j >= 2 and cc[j - 1] > oo[j - 1] and cc[j - 1] > cc[j - 2] and vv[j - 1] > vv[j - 2] and v < v13[j]:
+            reason = "熄火量（量增長紅後量縮到13MV下）"
+        elif diverge and j >= e + 2 and v5[j] < v5[j - 1] and v5[j - 1] >= v5[j - 2]:
+            hi = hh[max(e, j - 5):j].max()                               # 這一波 5MV 轉折前後的最高價
+            if peaks and hi > peaks[-1][1] and v5[j - 1] < peaks[-1][0]:
+                reason = "量價背離（價創高、5MV高點低於前波）"
+            peaks.append((v5[j - 1], hi))
         if reason:
             legs.append((j + 1, left, reason))
             return legs
-    legs.append((min(e + max_hold, n - 1), left, f"持有滿{max_hold}天"))
+    legs.append((end, left, "持有中" if max_hold is None else f"持有滿{max_hold}天"))
     return legs
 
 

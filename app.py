@@ -78,43 +78,43 @@ sector_stocks = {re.sub(r"^\d+\.\s*", "", k): v for k,v in sector_stocks.items()
 CSS = """
 <style>
 :root {color-scheme:dark;}
-.stApp {background:#090d13;color:#e7ebf2;}
-header[data-testid="stHeader"] {background:#090d13;}
+.stApp {background:#08080a;color:#ece6d8;}
+header[data-testid="stHeader"] {background:#08080a;}
 .block-container {padding:1.4rem 2.1rem 1.6rem;max-width:1920px;}
 [data-testid="stToolbar"] {right:1rem;}
-h1,h2,h3 {font-family:"Segoe UI","Microsoft JhengHei",sans-serif;color:#eef1f6;}
-[data-testid="stMarkdownContainer"] p {color:#abb5c5;}
-.brand {display:flex;align-items:center;justify-content:space-between;padding:10px 0 22px;border-bottom:1px solid #28303b;margin-bottom:20px;gap:16px;}
+h1,h2,h3 {font-family:"Segoe UI","Microsoft JhengHei",sans-serif;color:#f3eee2;}
+[data-testid="stMarkdownContainer"] p {color:#b3ac9d;}
+.brand {display:flex;align-items:center;justify-content:space-between;padding:10px 0 22px;border-bottom:1px solid #2b271e;margin-bottom:20px;gap:16px;}
 .brand-left {display:flex;gap:15px;align-items:center;}
-.monogram {width:44px;height:44px;border:1px solid #a78e58;border-radius:12px;display:grid;place-items:center;color:#deca94;font-family:Georgia,serif;font-size:25px;background:linear-gradient(145deg,#302a1d,#101720);}
-.eyebrow {font-size:10px;letter-spacing:3px;color:#bda979;margin-bottom:4px;}
-.brand-title {font-size:24px;font-weight:650;letter-spacing:1px;color:#edf1f8;}
-.brand-meta {text-align:right;font-size:11px;color:#8794a8;line-height:1.9;}
+.monogram {width:44px;height:44px;border:1px solid #a8873c;border-radius:12px;display:grid;place-items:center;color:#e6cf8f;font-family:Georgia,serif;font-size:25px;background:linear-gradient(145deg,#2e2615,#0e0d0b);}
+.eyebrow {font-size:10px;letter-spacing:3px;color:#bfa056;margin-bottom:4px;}
+.brand-title {font-size:24px;font-weight:650;letter-spacing:1px;color:#f5efe0;}
+.brand-meta {text-align:right;font-size:11px;color:#918a7b;line-height:1.9;}
 .pill {display:inline-block;border:1px solid #384438;border-radius:20px;padding:3px 10px;color:#bfc9ad;font-size:11px;letter-spacing:.8px;}
 .metric-row {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 23px;}
-.metric {background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:12px;padding:15px 18px;min-height:102px;}
-.metric-label {font-size:11px;color:#929fb1;letter-spacing:.8px;}
-.metric-value {font-size:23px;line-height:1.65;color:#e8edf6;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.metric-note {font-size:11px;color:#8794a8;}
-.up {color:#f17c7e!important;} .down {color:#55c8a4!important;} .gold {color:#d7bf84!important;}
+.metric {background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:12px;padding:15px 18px;min-height:102px;}
+.metric-label {font-size:11px;color:#9b9484;letter-spacing:.8px;}
+.metric-value {font-size:23px;line-height:1.65;color:#f0eadb;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.metric-note {font-size:11px;color:#918a7b;}
+.up {color:#f17c7e!important;} .down {color:#55c8a4!important;} .gold {color:#d4b062!important;}
 .section {display:flex;align-items:baseline;justify-content:space-between;margin:3px 0 10px;gap:8px;}
-.section-title {font-size:15px;font-weight:600;color:#e7ecf4;}
-.section-number {font-size:11px;color:#c8b078;margin-right:8px;font-family:monospace;}
-.section-note {font-size:10px;color:#8490a2;}
+.section-title {font-size:15px;font-weight:600;color:#efe9da;}
+.section-number {font-size:11px;color:#c9a552;margin-right:8px;font-family:monospace;}
+.section-note {font-size:10px;color:#8e8778;}
 .stock-head {display:flex;align-items:center;gap:12px;margin:3px 0 7px;}
 .stock-head h2 {margin:0;padding:0;font-size:27px;line-height:1.5;}
-.stock-code {font-family:monospace;font-size:14px;color:#cbb57e;border:1px solid #3b3527;border-radius:6px;padding:4px 8px;}
+.stock-code {font-family:monospace;font-size:14px;color:#cfae5c;border:1px solid #463a22;border-radius:6px;padding:4px 8px;}
 .price-line {display:flex;align-items:baseline;gap:12px;margin-bottom:10px;flex-wrap:wrap;}
-.last-price {font-size:34px;letter-spacing:-1px;color:#edf1f7;font-variant-numeric:tabular-nums;font-weight:600;}
-.price-details {font-size:12px;color:#9ba8ba;}
-.footer {border-top:1px solid #26303d;margin-top:18px;padding-top:12px;font-size:11px;color:#7e8b9d;display:flex;justify-content:space-between;gap:16px;}
-[data-testid="stSelectbox"] label,[data-testid="stCheckbox"] label {color:#a5b1c1;}
-[data-baseweb="select"]>div {background:#111924!important;border-color:#303b4c!important;color:#e4eaf3!important;border-radius:8px;}
-[data-testid="stButton"] button {background:#17202b;border:1px solid #3b4656;color:#dbc58e;border-radius:8px;}
-[data-testid="stButton"] button:hover {border-color:#bba167;color:#f0deb0;}
-[data-testid="stCaptionContainer"] {color:#8490a2;}
+.last-price {font-size:34px;letter-spacing:-1px;color:#f4eee0;font-variant-numeric:tabular-nums;font-weight:600;}
+.price-details {font-size:12px;color:#a59e8e;}
+.footer {border-top:1px solid #2a261d;margin-top:18px;padding-top:12px;font-size:11px;color:#898273;display:flex;justify-content:space-between;gap:16px;}
+[data-testid="stSelectbox"] label,[data-testid="stCheckbox"] label {color:#ada695;}
+[data-baseweb="select"]>div {background:#121110!important;border-color:#3a3326!important;color:#ebe5d6!important;border-radius:8px;}
+[data-testid="stButton"] button {background:#1a1813;border:1px solid #463c2a;color:#dcbf74;border-radius:8px;}
+[data-testid="stButton"] button:hover {border-color:#c9a552;color:#f2dea6;}
+[data-testid="stCaptionContainer"] {color:#8e8778;}
 @media(max-width:850px){.block-container{padding:1rem}.metric-row{grid-template-columns:repeat(2,1fr)}.brand-meta{display:none}.brand-title{font-size:19px}.metric-value{font-size:20px}}
-[data-testid="stCaptionContainer"] p {font-size:14px!important;color:#aebbd0!important;}
+[data-testid="stCaptionContainer"] p {font-size:14px!important;color:#b6af9f!important;}
 [data-testid="stHeader"]{display:none}.brand{padding:8px 0 14px;margin-bottom:12px}.metric{min-height:90px;padding:12px 16px}.metric-row{margin-bottom:16px}.brand-title{font-size:29px}.eyebrow{font-size:12px}.section-title{font-size:19px}.section-note,.section-number{font-size:13px}.metric-label,.metric-note{font-size:14px}.metric-value{font-size:28px}.price-details{font-size:15px}.last-price{font-size:44px}.footer{font-size:13px}.stock-head h2{font-size:31px}.block-container{padding-top:1.3rem}.price-line{margin-bottom:4px}
 </style>
 """
@@ -1183,11 +1183,11 @@ def load_stock_chips(code,market,target):
 
 CHIP_CSS='''<style>
 [data-testid="stSelectbox"] select,[data-testid="stSelectbox"] [role="combobox"],[data-testid="stSelectbox"] [data-baseweb="select"]>div{background:#17222f!important;color:#d5dfec!important;border-color:#394759!important}
-[data-testid="stButtonGroup"] button{background:#14202c!important;color:#aebfd3!important;border-color:#394759!important}
-[data-testid="stButtonGroup"] button[data-selected="true"]{background:#3b3423!important;color:#efc979!important}
+[data-testid="stButtonGroup"] button{background:#14202c!important;color:#bab3a3!important;border-color:#394759!important}
+[data-testid="stButtonGroup"] button[data-selected="true"]{background:#3b3423!important;color:#e3c06a!important}
 
-[data-testid="stButtonGroup"] [data-variant="segmented_control"],[data-testid="stButtonGroup"] button{background:#18212d!important;color:#bdcbdc!important;border:1px solid #344150!important;font-size:16px!important}[data-testid="stButtonGroup"] [data-variant="segmented_control"][data-selected],[data-testid="stButtonGroup"] [data-variant="segmented_control"][aria-pressed="true"],[data-testid="stButtonGroup"] button[aria-pressed="true"],[data-testid="stBaseButton-segmented_controlActive"]{background:#353024!important;color:#ead29a!important;border-color:#67583b!important}
-.chip-shell{border:1px solid #344150;border-radius:12px;background:#101823;padding:18px;margin-bottom:12px}.chip-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.chip-heading b{font-size:20px;color:#ecf1f8}.chip-date{font-size:13px;color:#c7b47e}.chip-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.chip-card{background:#182330;border-radius:8px;padding:14px 10px;min-width:0}.chip-label{color:#aebccd;font-size:14px}.chip-value{font-size:24px;font-weight:650;letter-spacing:-.5px;font-variant-numeric:tabular-nums;white-space:nowrap}.chip-note{color:#aab9cb;font-size:13px;line-height:1.6;margin-top:12px}.chip-status{color:#d6bd80;font-size:13px;margin-bottom:10px}.chip-margin{display:grid;grid-template-columns:1fr 1fr;gap:16px}.chip-margin h4{margin:0 0 10px;font-size:18px;color:#dfc88e}.chip-margin table{width:100%;border-collapse:collapse;font-size:15px;margin:0!important}.chip-margin h4{padding:0!important;line-height:1.3!important}.chip-margin td{padding:7px 0;border-bottom:1px solid #283543}.chip-margin td:last-child{text-align:right;font-variant-numeric:tabular-nums}.chip-up{color:#f17c7e}.chip-down{color:#55c8a4}.chip-neutral{color:#e7edf5}.chip-empty{padding:20px;color:#b8c6d6}.chip-title{font-size:25px;font-weight:650;margin:4px 0 14px}.chip-title small{font-size:15px;color:#c4ad79;margin-left:10px}
+[data-testid="stButtonGroup"] [data-variant="segmented_control"],[data-testid="stButtonGroup"] button{background:#1b1914!important;color:#bdcbdc!important;border:1px solid #3d3527!important;font-size:16px!important}[data-testid="stButtonGroup"] [data-variant="segmented_control"][data-selected],[data-testid="stButtonGroup"] [data-variant="segmented_control"][aria-pressed="true"],[data-testid="stButtonGroup"] button[aria-pressed="true"],[data-testid="stBaseButton-segmented_controlActive"]{background:#353024!important;color:#ead08a!important;border-color:#67583b!important}
+.chip-shell{border:1px solid #3d3527;border-radius:12px;background:#100f0e;padding:18px;margin-bottom:12px}.chip-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.chip-heading b{font-size:20px;color:#ecf1f8}.chip-date{font-size:13px;color:#c7b47e}.chip-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.chip-card{background:#182330;border-radius:8px;padding:14px 10px;min-width:0}.chip-label{color:#aebccd;font-size:14px}.chip-value{font-size:24px;font-weight:650;letter-spacing:-.5px;font-variant-numeric:tabular-nums;white-space:nowrap}.chip-note{color:#aab9cb;font-size:13px;line-height:1.6;margin-top:12px}.chip-status{color:#d4b062;font-size:13px;margin-bottom:10px}.chip-margin{display:grid;grid-template-columns:1fr 1fr;gap:16px}.chip-margin h4{margin:0 0 10px;font-size:18px;color:#dfc88e}.chip-margin table{width:100%;border-collapse:collapse;font-size:15px;margin:0!important}.chip-margin h4{padding:0!important;line-height:1.3!important}.chip-margin td{padding:7px 0;border-bottom:1px solid #283543}.chip-margin td:last-child{text-align:right;font-variant-numeric:tabular-nums}.chip-up{color:#f17c7e}.chip-down{color:#55c8a4}.chip-neutral{color:#e7edf5}.chip-empty{padding:20px;color:#b8c6d6}.chip-title{font-size:25px;font-weight:650;margin:4px 0 14px}.chip-title small{font-size:15px;color:#c4ad79;margin-left:10px}
 [data-testid="stTabs"] [data-baseweb="tab-list"]{gap:20px}[data-testid="stTabs"] [data-baseweb="tab"]{font-size:17px;height:42px}
 @media(max-height:820px){.chip-shell{padding:12px;margin-bottom:8px}.chip-card{padding:9px}.chip-heading{margin-bottom:8px}.chip-value{font-size:21px}.chip-margin td{padding:3px 0!important;font-size:14px;line-height:1.25!important}.chip-note{margin-top:7px;font-size:12px}.chip-title{margin-bottom:8px;font-size:23px}}
 </style>'''
@@ -1319,7 +1319,7 @@ def chip_trend_html(rows,kind,mode,height):
         fig.add_trace(go.Bar(x=x,y=[r.get(key) for r in rows],name=label,marker_color=color,hovertemplate=label+(' %{y:,.2f} ' if unit=='%' else ' %{y:,.0f} ')+unit+'<extra></extra>'),secondary_y=False)
     fig.add_trace(go.Scatter(x=x,y=[r.get('price') for r in rows],name='股價',mode='lines+markers',connectgaps=False,line=dict(color='#edbf53',width=2),marker_size=5,hovertemplate='股價 %{y:,.2f}<extra></extra>'),secondary_y=True)
     graph_height=max(160,int(height*.48))
-    fig.update_layout(template='plotly_dark',paper_bgcolor='#101823',plot_bgcolor='#101823',height=graph_height,
+    fig.update_layout(template='plotly_dark',paper_bgcolor='#100f0e',plot_bgcolor='#100f0e',height=graph_height,
         margin=dict(l=56,r=58,t=36,b=30),barmode='relative' if kind=='institution' else 'group',bargap=.25,
         font=dict(family='Microsoft JhengHei,Segoe UI,sans-serif',size=13,color='#bac9dc'),
         legend=dict(orientation='h',y=1.18,x=0,font_size=13),hovermode='x unified',hoverlabel_font_size=14)
@@ -1337,7 +1337,7 @@ def chip_trend_html(rows,kind,mode,height):
         body+='<tr><td>'+row['date'][5:]+'</td>'
         for key,label in fields:
             v=row.get(key);signed=key in ('foreign','trust','dealer','total','fin_change','short_change')
-            color=('#f37373' if v>0 else '#55c8a4' if v<0 else '#c2cede') if signed and v is not None else '#c2cede'
+            color=('#f37373' if v>0 else '#55c8a4' if v<0 else '#cfc8b8') if signed and v is not None else '#cfc8b8'
             body+=f'<td style="color:{color}">{value(v,signed,key)}</td>'
         body+='<td style="color:#edbf53">'+(f"{row['price']:,.2f}" if row.get('price') is not None else '—')+'</td></tr>'
     n=sum(r['available'] for r in rows);last=next((r['date'] for r in reversed(rows) if r['available']),'尚未取得')
@@ -1345,14 +1345,14 @@ def chip_trend_html(rows,kind,mode,height):
     notes='空白為未發布、未列此股或來源失敗，不視為零。' + ('券資比＝融券餘額÷融資餘額；融資餘額為零時不計算。' if mode=='券資比' else '')
     payload=json.dumps(json.loads(fig.to_json())).replace('</','<\\/')
     return '''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><style>
-*{box-sizing:border-box}body{margin:0;background:#101823;color:#c2cede;font:15px 'Microsoft JhengHei','Segoe UI',sans-serif}.shell{height:100vh;border:1px solid #344150;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}.caption{padding:10px 14px;color:#c6b17c;font-size:13px;border-bottom:1px solid #293746}.chart{flex:none}.table{flex:1;overflow:auto;min-height:80px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th{position:sticky;top:0;background:#1b2734;color:#aebfd3;font-size:13px;z-index:2}td,th{padding:10px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #293746}td:first-child,th:first-child{text-align:left}tr:first-child td{background:#1a2631;font-weight:650}tbody tr:hover{background:#202d3c}.note{font-size:12px;padding:8px 12px;color:#99adc5;border-top:1px solid #293746}@media(max-height:520px){td,th{padding:7px 8px}.caption{padding:7px 12px}}
+*{box-sizing:border-box}body{margin:0;background:#100f0e;color:#cfc8b8;font:15px 'Microsoft JhengHei','Segoe UI',sans-serif}.shell{height:100vh;border:1px solid #3d3527;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}.caption{padding:10px 14px;color:#cfae5c;font-size:13px;border-bottom:1px solid #332d21}.chart{flex:none}.table{flex:1;overflow:auto;min-height:80px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th{position:sticky;top:0;background:#1e1c17;color:#bab3a3;font-size:13px;z-index:2}td,th{padding:10px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid #332d21}td:first-child,th:first-child{text-align:left}tr:first-child td{background:#1e1c17;font-weight:650}tbody tr:hover{background:#25221b}.note{font-size:12px;padding:8px 12px;color:#a49d8d;border-top:1px solid #332d21}@media(max-height:520px){td,th{padding:7px 8px}.caption{padding:7px 12px}}
 </style><script src="plotly.min.js"></script></head><body><div class="shell"><div class="caption">'''+caption+'''</div><div id="chip-graph" class="chart"></div><div class="table"><table><thead><tr>'''+heads+'''</tr></thead><tbody>'''+body+'''</tbody></table></div><div class="note">'''+notes+'''</div></div><script>const f='''+payload+''';Plotly.newPlot('chip-graph',f.data,f.layout,{responsive:true,displayModeBar:false,displaylogo:false});</script></body></html>'''
 
 
 HISTORY_FILE=Path(__file__).resolve().parent/"signal_history.csv"
 HISTORY_RULES={
     "v3":("5MV 帶出 13MV 的第一天、34MV 上揚；站上並扣低 21MA、10 日強於大盤；族群強於大盤且排族群前三；當天收紅、強於大盤、收在上半部；只做電子／重電／綠能；大盤在 60MA 之上 → 當天收盤買",
-          "停損＝進場前 3 日最低；極限大量後量縮不見高先出一半；跌破停損、跌破 21MA、8／21MA 扣高且收破 8MA 全出；最多持有 60 天；出場訊號隔天開盤賣"),
+          "停損＝進場前 3 日最低；極限大量後量縮不見高先"+xiao_panel.xs._part_label(xiao_panel.xs.PART_EXIT)+"；跌破停損、跌破 21MA、8／21MA 扣高且收破 8MA 全出；不設持有天數上限；出場訊號隔天開盤賣"),
     "v2":("攻擊（量增價漲）後 2～12 天內回檔量縮、角度緩、守住攻擊日低點；凹洞量回升（量大於昨天與 5 天前）、收紅；尚未突破攻擊高點；大盤在 60MA 之上 → 當天收盤買",
           "停損＝回檔低點；其餘同 v3"),
 }
@@ -1425,19 +1425,19 @@ def render_trade_history(height):
     for col in ("進場","出場"):
         b.configure_column(col,width=72,minWidth=64,type=["numericColumn"],valueFormatter=num)
     b.configure_column("出場原因",width=120,minWidth=90,flex=1,tooltipField="出場原因",
-        cellStyle=JsCode("function(p){return {color:p.value==='持有中'?'#9cc7f5':'#9fb0c4',fontSize:'14px'};}"))
+        cellStyle=JsCode("function(p){return {color:p.value==='持有中'?'#9cc7f5':'#a8a191',fontSize:'14px'};}"))
     b.configure_column("報酬%",width=72,minWidth=66,type=["numericColumn"],sort="desc" if res=="獲利" else None,
         valueFormatter=JsCode("function(p){return (p.value>0?'+':'')+Number(p.value).toFixed(2);}"),
-        cellStyle=JsCode("function(p){return {color:p.value>0?'#f17c7e':p.value<0?'#55c8a4':'#c2cede',fontWeight:'600'};}"))
+        cellStyle=JsCode("function(p){return {color:p.value>0?'#f17c7e':p.value<0?'#55c8a4':'#cfc8b8',fontWeight:'600'};}"))
     with left:
         resp=AgGrid(show,gridOptions=b.build(),height=body_h-92,theme="alpine",update_on=["selectionChanged"],fit_columns_on_grid_load=True,
             key=f"hist_grid_{k}_{per}_{res}_{body_h}",allow_unsafe_jscode=True,custom_css={
-                ".ag-root-wrapper":{"background-color":"#0f1620 !important","border":"1px solid #293442 !important","border-radius":"10px !important"},
-                ".ag-header":{"background-color":"#18212d !important","color":"#c3cedc !important","font-size":"14px !important"},
-                ".ag-row":{"background-color":"#101721 !important","color":"#dbe2ec !important","font-size":"15px !important","border-bottom":"1px solid #1c2633 !important"},
-                ".ag-row-odd":{"background-color":"#121b26 !important"},".ag-row-hover":{"background-color":"#202b37 !important"},
-                ".ag-row-selected":{"background-color":"#2a2b24 !important","border-left":"3px solid #cfb679 !important"},
-                ".ag-body-viewport":{"background-color":"#101721 !important"},
+                ".ag-root-wrapper":{"background-color":"#0e0d0c !important","border":"1px solid #332d21 !important","border-radius":"10px !important"},
+                ".ag-header":{"background-color":"#1b1914 !important","color":"#cfc8b8 !important","font-size":"14px !important"},
+                ".ag-row":{"background-color":"#0f0e0d !important","color":"#e2dccd !important","font-size":"15px !important","border-bottom":"1px solid #1f1d18 !important"},
+                ".ag-row-odd":{"background-color":"#13120f !important"},".ag-row-hover":{"background-color":"#25221b !important"},
+                ".ag-row-selected":{"background-color":"#2a2416 !important","border-left":"3px solid #c9a552 !important"},
+                ".ag-body-viewport":{"background-color":"#0f0e0d !important"},
                 ".ag-cell,.ag-header-cell":{"padding-left":"5px !important","padding-right":"5px !important"}})
     rows=resp.get("selected_rows")
     i=None
@@ -1447,7 +1447,7 @@ def render_trade_history(height):
     frame=trade_frame(r.ticker,(sig-pd.Timedelta(days=200)).strftime("%Y-%m-%d"),
                       min(ex+pd.Timedelta(days=40),pd.Timestamp(taipei_now().date())+pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
     open_=r.exit_reason=="持有中"
-    half=f'　<span>出一半</span>{r.half_date:%m-%d} @ {r.half_price:,.2f}' if pd.notna(r.half_date) else ""
+    half=f'　<span>減碼</span>{r.half_date:%m-%d} @ {r.half_price:,.2f}' if pd.notna(r.half_date) else ""
     head=(f'<div class="hist-title"><b>{escape(r["name"])}</b> {escape(r.code)} <i>{escape(str(r.sector))}</i>'
           f'<em class="{"up" if r.ret_net>0 else "down"}">{r.ret_net:+.2f}%</em></div>'
           f'<div class="hist-legs"><div><span>進場</span>{sig:%Y-%m-%d} 收盤 {r.entry_price:,.2f}　<span>停損</span>{r.stop:,.2f}{half}</div>'
@@ -1459,7 +1459,7 @@ def render_trade_history(height):
     labels=frame.index.strftime("%Y-%m-%d")
     d=lambda t:t.strftime("%Y-%m-%d")
     marks=[(d(sig),"buy",f"進場 {r.entry_price:,.2f}")]
-    if pd.notna(r.half_date):marks.append((d(r.half_date),"half",f"出一半 {r.half_price:,.2f}"))
+    if pd.notna(r.half_date):marks.append((d(r.half_date),"half",f"{xiao_panel.xs._part_label(xiao_panel.xs.PART_EXIT)} {r.half_price:,.2f}"))
     if not open_:marks.append((d(ex),"sell",f"出場 {r.exit_price:,.2f}"))
     pos=list(labels)
     start=pos.index(d(sig)) if d(sig) in pos else max(0,len(pos)-60)
@@ -1522,7 +1522,7 @@ def ranking_grid(frame, key, height, chosen_column, pick=None):
         builder.configure_column("成交值(億)",headerName="成交值(億)",headerTooltip="族群成分股今日成交值加總（價格×成交股數，億元）。相對強勢要有量才是真金白銀",
             width=96,minWidth=80,maxWidth=110,type=["numericColumn"],
             valueFormatter=JsCode("function(p){return p.value==null?'—':Number(p.value).toLocaleString('en-US',{maximumFractionDigits:p.value>=100?0:1});}"),
-            cellStyle=JsCode("function(p){return {color:p.value>=100?'#f2c14e':p.value>=20?'#dbe2ec':'#7a8a9e',fontVariantNumeric:'tabular-nums'};}"))
+            cellStyle=JsCode("function(p){return {color:p.value>=100?'#f2c14e':p.value>=20?'#e2dccd':'#868070',fontVariantNumeric:'tabular-nums'};}"))
     if "股期商品" in frame:builder.configure_column("股期商品",hide=True)
     if "相對狀態" in frame:builder.configure_column("相對狀態",hide=True)
     builder.configure_column("趨勢", hide=True, width=65, minWidth=62, maxWidth=72,
@@ -1535,13 +1535,13 @@ def ranking_grid(frame, key, height, chosen_column, pick=None):
     if "訊號" in frame:
         for col in ("訊號","整理","入選"):
             builder.configure_column(col,width=58,minWidth=52,maxWidth=66,type=["numericColumn"],
-                cellStyle=JsCode("function(p){return {color:p.value>0?'"+("#f17c7e" if col=="訊號" else "#efc979" if col=="整理" else "#c2cede")+"':'#5d6b7d',fontWeight:'600'};}"))
+                cellStyle=JsCode("function(p){return {color:p.value>0?'"+("#f17c7e" if col=="訊號" else "#e3c06a" if col=="整理" else "#cfc8b8")+"':'#6c6658',fontWeight:'600'};}"))
     if "狀態" in frame:
         builder.configure_column("狀態",width=120,minWidth=96,maxWidth=150,tooltipField="狀態",
-            cellStyle=JsCode("function(p){const m={'轉折訊號':'#ff9ea1','量縮整理':'#efc979','趨勢・無型態':'#a9b6c9'};return {color:m[p.value]||'#66778c',fontSize:'17px',fontWeight:p.value==='轉折訊號'?'700':'400'};}"))
+            cellStyle=JsCode("function(p){const m={'轉折訊號':'#ff9ea1','量縮整理':'#e3c06a','趨勢・無型態':'#b2ab9b'};return {color:m[p.value]||'#66778c',fontSize:'17px',fontWeight:p.value==='轉折訊號'?'700':'400'};}"))
     if "類別" in frame:
-        if "板塊" in frame:builder.configure_column("板塊",width=104,minWidth=88,maxWidth=150,tooltipField="板塊",cellStyle=JsCode("function(p){return {color:'#d9c58e',fontSize:'17px'};}"))
-        builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e2c47c',fontWeight:p.value==='股票'?'400':'700',fontSize:'17px'};}"))
+        if "板塊" in frame:builder.configure_column("板塊",width=104,minWidth=88,maxWidth=150,tooltipField="板塊",cellStyle=JsCode("function(p){return {color:'#dcbf74',fontSize:'17px'};}"))
+        builder.configure_column("類別",width=66,minWidth=60,maxWidth=72,headerTooltip="股票＝現股前三強；股期＝有股票期貨者前三強；股＋期＝兩邊都入選",cellStyle=JsCode("function(p){return {color:p.value==='股票'?'#9fb3c8':'#e0bd63',fontWeight:p.value==='股票'?'400':'700',fontSize:'17px'};}"))
         builder.configure_column("屬性",hide=True)
     if "族群板塊" in frame:
         builder.configure_column("族群板塊", width=190, minWidth=130,maxWidth=260,tooltipField="族群板塊")
@@ -1549,7 +1549,7 @@ def ranking_grid(frame, key, height, chosen_column, pick=None):
         builder.configure_column("趨勢", hide=True)
         builder.configure_column("代號", width=70, minWidth=68,maxWidth=80)
         builder.configure_column("名稱", width=100, minWidth=82,maxWidth=130,tooltipField="相對狀態")
-        if "類別" not in frame:builder.configure_column("屬性", width=60, minWidth=58, maxWidth=64, tooltipField="股期商品",cellStyle=JsCode("function(p){return {color:p.value==='股期'?'#e2c47c':'#8895a7',fontWeight:p.value==='股期'?'700':'400'};}"))
+        if "類別" not in frame:builder.configure_column("屬性", width=60, minWidth=58, maxWidth=64, tooltipField="股期商品",cellStyle=JsCode("function(p){return {color:p.value==='股期'?'#e0bd63':'#928b7c',fontWeight:p.value==='股期'?'700':'400'};}"))
     battery=JsCode("""class Battery {init(p){const v=Number(p.value);this.e=document.createElement('div');this.e.style.cssText='display:flex;align-items:center;gap:6px;height:100%;font-size:12px';if(p.value==null){this.e.textContent='—';return;}this.e.title='RS '+Number(p.data['動能(%)']).toFixed(2)+'%；相對強度 '+v+'/100，50為中性，非勝率';const b=document.createElement('div');b.style.cssText='display:flex;gap:2px;border:1px solid #718095;border-radius:4px;padding:3px;flex:1;height:20px;min-width:48px';const color=v>50?'#efbd67':v<50?'#4fb7ad':'#8798ad';for(let i=0;i<10;i++){const c=document.createElement('i');c.style.cssText='flex:1;border-radius:1px;background:'+(i<Math.round(v/10)?color:'#263340');b.appendChild(c);}const n=document.createElement('span');n.style.cssText='width:23px;color:'+color;n.textContent=v;this.e.append(b,n);}getGui(){return this.e;}}""")
     builder.configure_column('Momentum',headerName='Momentum',headerTooltip='RS換算相對多方強度：0～100，50為中性；非勝率、不代表股價一定上漲',minWidth=112,width=130,flex=1,cellRenderer=battery,hide="類別" in frame or "訊號" in frame)
     if st.session_state.get("_mobile"):
@@ -1566,15 +1566,15 @@ def ranking_grid(frame, key, height, chosen_column, pick=None):
         update_on=["selectionChanged"], fit_columns_on_grid_load=True, key=f"{key}_{height}"+(f"_{pick}" if pick is not None else ""),
         allow_unsafe_jscode=True, custom_css={
             ".ag-cell,.ag-header-cell": {"padding-left":"6px !important","padding-right":"6px !important"},
-            ".ag-root-wrapper": {"background-color":"#0f1620 !important", "border":"1px solid #293442 !important", "border-radius":"10px !important"},
-            ".ag-header": {"background-color":"#18212d !important", "color":"#c3cedc !important", "font-size":"16px !important", "border-bottom":"1px solid #2c3746 !important"},
+            ".ag-root-wrapper": {"background-color":"#0e0d0c !important", "border":"1px solid #332d21 !important", "border-radius":"10px !important"},
+            ".ag-header": {"background-color":"#1b1914 !important", "color":"#cfc8b8 !important", "font-size":"16px !important", "border-bottom":"1px solid #352f22 !important"},
             ".ag-header-cell-text": {"font-weight":"600 !important"},
-            ".ag-row": {"background-color":"#101721 !important", "color":"#dbe2ec !important", "font-size":"19px !important", "border-bottom":"1px solid #1c2633 !important"},
-            ".ag-row-odd": {"background-color":"#121b26 !important"},
-            ".ag-row-hover": {"background-color":"#202b37 !important"},
-            ".ag-row-selected": {"background-color":"#2a2b24 !important", "border-left":"3px solid #cfb679 !important"},
-            ".ag-body-viewport": {"background-color":"#101721 !important"},
-            ".ag-body-horizontal-scroll-viewport": {"background-color":"#101721 !important"},
+            ".ag-row": {"background-color":"#0f0e0d !important", "color":"#e2dccd !important", "font-size":"19px !important", "border-bottom":"1px solid #1f1d18 !important"},
+            ".ag-row-odd": {"background-color":"#13120f !important"},
+            ".ag-row-hover": {"background-color":"#25221b !important"},
+            ".ag-row-selected": {"background-color":"#2a2416 !important", "border-left":"3px solid #c9a552 !important"},
+            ".ag-body-viewport": {"background-color":"#0f0e0d !important"},
+            ".ag-body-horizontal-scroll-viewport": {"background-color":"#0f0e0d !important"},
         })
     rows = response.get("selected_rows")
     if rows is not None and len(rows):
@@ -1618,17 +1618,17 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
             pts=[(pos[d],float(df.Low.iloc[pos[d]])) for d,k,_ in marks if k==kind and d in pos]
             if pts:
                 fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=[lo*0.985 for _,lo in pts],mode="markers",name=name,
-                    marker=dict(symbol="triangle-up",size=13,color=color,line=dict(color="#0f1620",width=1)),
+                    marker=dict(symbol="triangle-up",size=13,color=color,line=dict(color="#0e0d0c",width=1)),
                     hovertemplate=name+"<extra></extra>"),row=1,col=1)
         # 回測紀錄：進場（紅▲在低點下）、減半（橘▼）、出場（綠▼在高點上），旁邊標文字
-        for kind,color,symbol,name in (("buy","#ff5c5c","triangle-up","進場"),("half","#ffb347","triangle-down","出一半"),("sell","#3ddc97","triangle-down","出場")):
+        for kind,color,symbol,name in (("buy","#ff5c5c","triangle-up","進場"),("half","#ffb347","triangle-down","減碼"),("sell","#3ddc97","triangle-down","出場")):
             pts=[(pos[d],txt) for d,k,txt in marks if k==kind and d in pos]
             if not pts:continue
             up=kind=="buy"
             ys=[float(df.Low.iloc[p])*0.97 if up else float(df.High.iloc[p])*1.03 for p,_ in pts]
             fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=ys,mode="markers+text",name=name,text=[t for _,t in pts],
                 textposition="bottom center" if up else "top center",textfont=dict(color=color,size=14),
-                marker=dict(symbol=symbol,size=17,color=color,line=dict(color="#0f1620",width=1)),
+                marker=dict(symbol=symbol,size=17,color=color,line=dict(color="#0e0d0c",width=1)),
                 hovertemplate="%{text}<extra></extra>"),row=1,col=1)
     if interval=="1d":
         for price,label,color in levels:
@@ -1642,17 +1642,17 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
                 fig.add_annotation(x=len(df)-n,y=float(df[column].iloc[-n]),xref="x" if row==1 else "x2",yref="y" if row==1 else "y2",
                     text=f"{prefix}{n}",font=dict(size=13,color=color),showarrow=True,
                     arrowcolor=color,arrowhead=2,arrowwidth=1,ax=-18 if i==0 else 18,ay=-22,
-                    bgcolor="#101721",borderpad=3)
+                    bgcolor="#0f0e0d",borderpad=3)
     fig.update_yaxes(nticks=5,tickfont=dict(size=16),row=1,col=1)
     fig.update_yaxes(nticks=3,tickfont=dict(size=15),row=2,col=1)
-    fig.update_layout(template="plotly_dark",paper_bgcolor="#0f1620",plot_bgcolor="#0f1620",
+    fig.update_layout(template="plotly_dark",paper_bgcolor="#0e0d0c",plot_bgcolor="#0e0d0c",
         height=height,margin=dict(l=14,r=96,t=36,b=36),dragmode="pan",hovermode=False,
-        hoverlabel=dict(bgcolor="#1b2532",font_size=12),font=dict(family="Segoe UI, Microsoft JhengHei, sans-serif",size=16,color="#bdc9da"),
+        hoverlabel=dict(bgcolor="#1e1c17",font_size=12),font=dict(family="Segoe UI, Microsoft JhengHei, sans-serif",size=16,color="#c9c2b2"),
         showlegend=True,legend=dict(orientation="h",x=0,y=1.04,font=dict(size=14),bgcolor="rgba(0,0,0,0)"),
-        yaxis=dict(side="right",fixedrange=True,gridcolor="#202a38",zeroline=False,tickformat=",.2f"),
-        yaxis2=dict(side="right",fixedrange=True,gridcolor="#202a38",zeroline=False,tickformat=".3s"))
-    fig.update_xaxes(type="linear",rangeslider_visible=False,showgrid=True,gridcolor="#202a38",zeroline=False,showspikes=False,
-                     spikemode="across",spikesnap="cursor",spikecolor="#66768d",spikethickness=1,tickangle=0)
+        yaxis=dict(side="right",fixedrange=True,gridcolor="#24211b",zeroline=False,tickformat=",.2f"),
+        yaxis2=dict(side="right",fixedrange=True,gridcolor="#24211b",zeroline=False,tickformat=".3s"))
+    fig.update_xaxes(type="linear",rangeslider_visible=False,showgrid=True,gridcolor="#24211b",zeroline=False,showspikes=False,
+                     spikemode="across",spikesnap="cursor",spikecolor="#7a7365",spikethickness=1,tickangle=0)
     fig.update_xaxes(matches="x2",row=1,col=1)
     fig.update_xaxes(matches=None,row=2,col=1)
     payload = json.loads(fig.to_json())
@@ -1666,13 +1666,13 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
 
 
 CHART_TEMPLATE = r'''<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><style>
-*{box-sizing:border-box}body{margin:0;background:#0f1620;color:#cbd6e5;font:12px "Segoe UI","Microsoft JhengHei",sans-serif}
-.shell{border:1px solid #293442;border-radius:12px;overflow:hidden}.toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #25303e;background:#121c28}
-#timeframe{background:#1a2633;color:#e7ce97;border:1px solid #65593f;border-radius:5px;padding:5px;font:inherit;max-width:80px}button{background:transparent;color:#9aaabd;border:1px solid transparent;border-radius:5px;padding:6px 9px;font:inherit;cursor:pointer}button:hover{background:#243144;color:#f0dba2}button.active{background:#353024;color:#ead29a;border-color:#67583b}button:focus-visible{outline:2px solid #d6bd80}.sep{height:18px;width:1px;background:#334051;margin:0 4px}.spacer{flex:1}.label{font-size:10px;color:#71829a;letter-spacing:1px}.ohlc{padding:10px 14px 0;min-height:30px;color:#a1afc1;font:11px monospace;line-height:1.5}.hint{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 13px;border-top:1px solid #25303e;color:#7e8fa6;font-size:10px}#chart{width:100%}.shell:fullscreen{height:100vh;border:0;border-radius:0;display:flex;flex-direction:column}.shell:fullscreen #chart{flex:1;min-height:0}
-body{font-size:14px}.bar-date{padding-top:6px!important}.ohlc{padding-top:3px!important;padding-bottom:6px!important}.ohlc b{font-size:18px!important}#ma-values{padding-bottom:2px!important}.label,.hint{font-size:12px;color:#b2bed0}.toolbar{gap:3px;padding:9px}.toolbar button{padding:7px}.ohlc{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:7px 14px 12px}.ohlc span{display:block;font:12px "Microsoft JhengHei",sans-serif;color:#a9b6c9}.ohlc b{display:block;font:600 19px "Segoe UI",sans-serif;color:#eff3fa;font-variant-numeric:tabular-nums}.bar-date{padding:12px 14px 0;font-size:13px;color:#dcc58c}#ma-values{padding:0 14px 8px;color:#c7b88f;font-size:13px}.chart-wrap{position:relative}.cross,.axis-tag{position:absolute;pointer-events:none;display:none;z-index:20}.vertical{border-left:1px dashed #e5cf9b}.horizontal{border-top:1px dashed #c4b58f;opacity:.7}.axis-tag{background:#e3cb94;color:#101721;border-radius:3px;padding:3px 5px;font:600 12px monospace;white-space:nowrap}.time-tag{font-size:12px}.shell:fullscreen .chart-wrap{flex:1;min-height:0}
+*{box-sizing:border-box}body{margin:0;background:#0e0d0c;color:#d6cfbf;font:12px "Segoe UI","Microsoft JhengHei",sans-serif}
+.shell{border:1px solid #332d21;border-radius:12px;overflow:hidden}.toolbar{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:10px 12px;border-bottom:1px solid #29251d;background:#14120f}
+#timeframe{background:#1d1b16;color:#e6cb84;border:1px solid #6b5a33;border-radius:5px;padding:5px;font:inherit;max-width:80px}button{background:transparent;color:#9aaabd;border:1px solid transparent;border-radius:5px;padding:6px 9px;font:inherit;cursor:pointer}button:hover{background:#243144;color:#f0dba2}button.active{background:#353024;color:#ead08a;border-color:#67583b}button:focus-visible{outline:2px solid #d4b062}.sep{height:18px;width:1px;background:#334051;margin:0 4px}.spacer{flex:1}.label{font-size:10px;color:#71829a;letter-spacing:1px}.ohlc{padding:10px 14px 0;min-height:30px;color:#a1afc1;font:11px monospace;line-height:1.5}.hint{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 13px;border-top:1px solid #29251d;color:#7e8fa6;font-size:10px}#chart{width:100%}.shell:fullscreen{height:100vh;border:0;border-radius:0;display:flex;flex-direction:column}.shell:fullscreen #chart{flex:1;min-height:0}
+body{font-size:14px}.bar-date{padding-top:6px!important}.ohlc{padding-top:3px!important;padding-bottom:6px!important}.ohlc b{font-size:18px!important}#ma-values{padding-bottom:2px!important}.label,.hint{font-size:12px;color:#b2bed0}.toolbar{gap:3px;padding:9px}.toolbar button{padding:7px}.ohlc{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:7px 14px 12px}.ohlc span{display:block;font:12px "Microsoft JhengHei",sans-serif;color:#b2ab9b}.ohlc b{display:block;font:600 19px "Segoe UI",sans-serif;color:#eff3fa;font-variant-numeric:tabular-nums}.bar-date{padding:12px 14px 0;font-size:13px;color:#dcc58c}#ma-values{padding:0 14px 8px;color:#c7b88f;font-size:13px}.chart-wrap{position:relative}.cross,.axis-tag{position:absolute;pointer-events:none;display:none;z-index:20}.vertical{border-left:1px dashed #e5cf9b}.horizontal{border-top:1px dashed #c4b58f;opacity:.7}.axis-tag{background:#e3cb94;color:#0f0e0d;border-radius:3px;padding:3px 5px;font:600 12px monospace;white-space:nowrap}.time-tag{font-size:12px}.shell:fullscreen .chart-wrap{flex:1;min-height:0}
 body{font-size:16px}.toolbar{flex-wrap:wrap;gap:3px;padding:6px}.toolbar button{padding:5px}.ohlc b{font-size:21px!important}.ohlc span{font-size:14px}.bar-date,#ma-values{font-size:14px}.ohlc>div{min-width:0}.ohlc b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.axis-tag{font-size:14px}.hint{font-size:12px}
-#deduct-values{padding:0 14px 4px;font-size:13px;line-height:20px}#deduct-values .deduct-row{display:flex;flex-wrap:wrap;gap:4px 12px;white-space:nowrap}#deduct-values .deduct-title{color:#b7c5d6;min-width:108px}#deduct-values .deduct-item{font-variant-numeric:tabular-nums}#deduct-values b{font-size:14px}
-body{font-size:17px}.label,.hint{font-size:14px!important;color:#b9c5d6}.toolbar button,#timeframe{font-size:16px}.ohlc span{font-size:15px!important}.ohlc b{font-size:23px!important}.bar-date,#ma-values{font-size:15px!important}#deduct-values{font-size:15px;line-height:23px}#deduct-values .deduct-title{min-width:122px}#deduct-values b{font-size:16px}
+#deduct-values{padding:0 14px 4px;font-size:13px;line-height:20px}#deduct-values .deduct-row{display:flex;flex-wrap:wrap;gap:4px 12px;white-space:nowrap}#deduct-values .deduct-title{color:#c4bdad;min-width:108px}#deduct-values .deduct-item{font-variant-numeric:tabular-nums}#deduct-values b{font-size:14px}
+body{font-size:17px}.label,.hint{font-size:14px!important;color:#c4bdad}.toolbar button,#timeframe{font-size:16px}.ohlc span{font-size:15px!important}.ohlc b{font-size:23px!important}.bar-date,#ma-values{font-size:15px!important}#deduct-values{font-size:15px;line-height:23px}#deduct-values .deduct-title{min-width:122px}#deduct-values b{font-size:16px}
 @media(max-width:600px){body{font-size:15px}.toolbar button,#timeframe{font-size:14px;padding:5px 6px}.ohlc b{font-size:17px!important}.ohlc span{font-size:13px!important}#deduct-values{font-size:13px;line-height:20px}#deduct-values b{font-size:14px}.hint{display:none}#chart .legend{display:none}#ma-values{font-size:13px!important}}
 @media(max-width:600px){.ohlc b{font-size:16px}.ohlc{gap:5px}.toolbar button{font-size:12px}}
 </style><script src="plotly.min.js"></script></head><body><div class="shell" id="shell">
@@ -1703,7 +1703,7 @@ function updateDeduct(){
  const box=document.getElementById('deduct-values');
  box.style.display=showDeduct?'block':'none';
  box.innerHTML=[["下根均價扣抵",[3,10,21,52],m.close,1,"MA"],["下根均量扣抵",[5,13,34],m.volume,1000,"VMA"]].map(([title,periods,data,unit,prefix])=>
- '<div class="deduct-row"><span class="deduct-title">'+title+'</span>'+periods.map((n,j)=>{const i=N-n;const value=i>=0?data[i]:null;return '<span class="deduct-item" style="color:'+(prefix==='MA'?['#d6bb7c','#9fb8c7','#86b7ee','#a88e68']:['#d6bb7c','#9fb8c7','#86b7ee'])[j]+'" title="'+(i>=0?m.labels[i]+'：下一根會移出這筆資料':'資料不足')+'">'+prefix+n+' <b>'+(value==null?'—':unit===1000?(value/unit).toLocaleString('en-US',{maximumFractionDigits:1})+' 張':fmt(value))+'</b></span>';}).join('')+'</div>').join('');
+ '<div class="deduct-row"><span class="deduct-title">'+title+'</span>'+periods.map((n,j)=>{const i=N-n;const value=i>=0?data[i]:null;return '<span class="deduct-item" style="color:'+(prefix==='MA'?['#d4b062','#9fb8c7','#86b7ee','#a88e68']:['#d4b062','#9fb8c7','#86b7ee'])[j]+'" title="'+(i>=0?m.labels[i]+'：下一根會移出這筆資料':'資料不足')+'">'+prefix+n+' <b>'+(value==null?'—':unit===1000?(value/unit).toLocaleString('en-US',{maximumFractionDigits:1})+' 張':fmt(value))+'</b></span>';}).join('')+'</div>').join('');
 }
 updateDeduct();
 const crossIds=['cross-v','cross-p','cross-q','tag-p','tag-q','tag-t'];
@@ -1802,9 +1802,9 @@ COMPACT_CSS="""<style>
 [data-testid="stSelectbox"] label{display:none}[data-baseweb="select"]>div{min-height:36px}
 [data-testid="stButton"] button{min-height:36px;padding:4px 10px}
 .stElementContainer:has(.price-line){height:38px!important;min-height:38px!important}.stElementContainer:has(.strip){height:28px!important;min-height:28px!important}.stElementContainer:has(.section){height:24px!important;min-height:24px!important}
-.strip{display:flex;gap:16px;align-items:center;justify-content:space-between;height:28px;padding:4px 10px;background:#121d29;border:1px solid #263342;border-radius:5px;font-size:12px;color:#b7c4d5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.strip{display:flex;gap:16px;align-items:center;justify-content:space-between;height:28px;padding:4px 10px;background:#14120f;border:1px solid #2f2a1f;border-radius:5px;font-size:12px;color:#c0b9a9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .strip.ok{border-color:#285748;color:#8dd8ba}.strip.bad{border-color:#976540;color:#ffd19a}
-.note-line{height:22px;line-height:22px;color:#91a2b8;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.note-line{height:22px;line-height:22px;color:#9c9585;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 [data-testid="stCaptionContainer"] p{font-size:12px!important}.footer{margin-top:0;padding:0;border:0;font-size:11px}
 @media(max-width:900px){.metric-row{grid-template-columns:repeat(2,1fr)}.brand-title{font-size:20px}}
 </style>"""
@@ -1814,18 +1814,18 @@ READABLE_CSS="""<style>
 .stElementContainer:has(.metric-row){height:76px!important;min-height:76px!important}
 .stElementContainer:has(.stock-head){height:44px!important;min-height:44px!important}
 .stElementContainer:has(.brand){height:52px!important;min-height:52px!important}
-[data-testid="stPopover"] button,[data-testid="stPopoverButton"],button[aria-haspopup="dialog"]{background:#18212d!important;border:1px solid #344353!important;color:#cbd6e5!important}
+[data-testid="stPopover"] button,[data-testid="stPopoverButton"],button[aria-haspopup="dialog"]{background:#1b1914!important;border:1px solid #3d3527!important;color:#d6cfbf!important}
 
-[data-baseweb="select"]>div{background:#18212d!important;color:#dce5ef!important;border-color:#344353!important}[data-baseweb="select"] svg{fill:#dce5ef!important}
-.st-key-stock_search [role="group"]{background:#05080c!important;border:1px solid #3a4658!important;border-radius:8px!important;min-height:42px}
-.st-key-stock_search [role="group"]:focus-within{border-color:#cfb679!important;box-shadow:0 0 0 1px rgba(207,182,121,.45)!important}
-.st-key-stock_search [data-testid="stSelectbox"] input[role="combobox"],.st-key-stock_search input{background:transparent!important;border:0!important;color:#ffffff!important;caret-color:#d7bf84;font-size:17px!important}
-.st-key-stock_search input::placeholder{color:#7f8da0!important}
-.st-key-stock_search [role="group"] svg{fill:#cfd8e3!important;color:#cfd8e3!important}
-[data-testid="stSelectboxVirtualDropdown"]{background:#05080c!important;border:1px solid #3a4658!important;border-radius:8px!important;box-shadow:0 10px 28px rgba(0,0,0,.6)!important}
+[data-baseweb="select"]>div{background:#1b1914!important;color:#e4ddce!important;border-color:#3d3527!important}[data-baseweb="select"] svg{fill:#e4ddce!important}
+.st-key-stock_search [role="group"]{background:#060606!important;border:1px solid #463c2a!important;border-radius:8px!important;min-height:42px}
+.st-key-stock_search [role="group"]:focus-within{border-color:#c9a552!important;box-shadow:0 0 0 1px rgba(207,182,121,.45)!important}
+.st-key-stock_search [data-testid="stSelectbox"] input[role="combobox"],.st-key-stock_search input{background:transparent!important;border:0!important;color:#ffffff!important;caret-color:#d4b062;font-size:17px!important}
+.st-key-stock_search input::placeholder{color:#8a8374!important}
+.st-key-stock_search [role="group"] svg{fill:#d8d1c2!important;color:#d8d1c2!important}
+[data-testid="stSelectboxVirtualDropdown"]{background:#060606!important;border:1px solid #463c2a!important;border-radius:8px!important;box-shadow:0 10px 28px rgba(0,0,0,.6)!important}
 [data-testid="stSelectboxVirtualDropdown"] [role="option"]{background:transparent!important;color:#ffffff!important;font-size:17px!important}
 [data-testid="stSelectboxVirtualDropdown"] [role="option"] *{color:inherit!important;font-size:17px!important}
-[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-hovered],[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-focused],[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"]{background:#2a2b24!important;color:#f2d99a!important}
+[data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-hovered],[data-testid="stSelectboxVirtualDropdown"] [role="option"][data-focused],[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"]{background:#2a2416!important;color:#f0d590!important}
 .brand-title{font-size:28px}.eyebrow{font-size:12px}.brand{height:52px}
 .metric{padding:8px 12px;min-width:0}.metric-label{font-size:14px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric-value{font-size:25px!important;line-height:1.35}.metric-row{height:76px}
 .section{height:32px;min-width:0;gap:8px}.section-title{font-size:19px;white-space:nowrap}.section-note{font-size:14px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
@@ -2089,7 +2089,8 @@ def _dashboard(width,height):
         else:
             with rest:view,login,refresh,details=st.columns([4.0,1.35,1.2,1.5],gap="small",vertical_alignment="center")
         with title:brand_col,nav_col=st.columns([1.4,1],gap="small",vertical_alignment="center")
-    with brand_col:st.markdown('<div class="brand"><div class="brand-left"><div class="monogram">C</div><div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
+    mark=f'<img class="brand-logo" src="{brand_logo_uri()}" alt="CQR">' if brand_logo_uri() else '<div class="monogram">C</div>'
+    with brand_col:st.markdown('<div class="brand"><div class="brand-left">'+mark+'<div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
     with nav_col,st.container(key="module_nav"):
         # 策略模組：之後新增的模組加在這個清單即可
         module=st.segmented_control("策略模組",MODULES,default=MODULES[0],key="module",label_visibility="collapsed") or MODULES[0]
@@ -2366,22 +2367,84 @@ def _dashboard(width,height):
                 st.markdown(f"目前名單 **{len(universe):,} 檔／{universe.sector.nunique()} 產業**。原池 108 檔中，有 {active} 檔符合本次普通股名單，股數覆蓋率 **{active/len(universe):.2%}**。")
 
 
+@st.cache_resource
+def brand_logo_uri():
+    """品牌牛熊 logo（brand_logo.png，透明背景）轉成 data URI 內嵌；檔案不存在時回空字串，改顯示原本的「C」。"""
+    import base64
+    fp=Path(__file__).resolve().parent/"brand_logo.png"
+    return "data:image/png;base64,"+base64.b64encode(fp.read_bytes()).decode() if fp.exists() else ""
+
+
+LUXURY_CSS="""<style>
+.brand-logo{height:52px;width:auto;display:block;flex:none;filter:drop-shadow(0 3px 10px rgba(0,0,0,.6)) drop-shadow(0 0 8px rgba(212,176,98,.12))}
+.st-key-m_head .brand-logo{height:40px}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&display=swap');
+:root{--gold:#d4b062;--gold-hi:#f2dea6;--gold-lo:#a8873c;--ink:#08080a;--panel:#12110e;--line:#2f2a1f}
+.stApp{background:radial-gradient(1200px 520px at 8% -8%,rgba(212,176,98,.075),transparent 60%),radial-gradient(900px 480px at 100% 0%,rgba(212,176,98,.045),transparent 55%),var(--ink)!important}
+/* 品牌 */
+.brand-title{font-family:'Noto Serif TC',Georgia,serif!important;font-weight:700!important;letter-spacing:3px!important;
+  background:linear-gradient(92deg,#f6e7b8 0%,#d4b062 48%,#9c7b34 100%);-webkit-background-clip:text;background-clip:text;color:transparent!important}
+.eyebrow{color:var(--gold)!important;letter-spacing:5px!important;font-weight:600}
+.monogram{border:1px solid var(--gold)!important;background:linear-gradient(145deg,#2e2615,#0b0a08)!important;color:var(--gold-hi)!important;
+  box-shadow:0 0 0 3px rgba(212,176,98,.08),0 8px 22px rgba(0,0,0,.65);font-family:'Noto Serif TC',Georgia,serif!important}
+/* 卡片：細金邊＋頂部微光 */
+.metric,.sig-card,.hist-stats>div,.sx-bar,.hist-head{background:linear-gradient(165deg,#191710 0%,#0f0e0b 70%)!important;border:1px solid var(--line)!important;
+  box-shadow:inset 0 1px 0 rgba(242,222,166,.07),0 6px 18px rgba(0,0,0,.35)}
+.metric:first-child{border-left:3px solid var(--gold)!important}
+.metric-label,.sig-card span,.hist-stats span{letter-spacing:.6px}
+.metric-value,.sig-card b,.hist-stats b{color:#f4eee0!important}
+/* 標題：金色短線 */
+.section-title,.sig-head b{font-family:'Noto Serif TC','Microsoft JhengHei',serif!important;letter-spacing:1px}
+.section-title::before,.sig-head b::before{content:"";display:inline-block;width:4px;height:.95em;margin-right:9px;vertical-align:-2px;border-radius:2px;
+  background:linear-gradient(180deg,var(--gold-hi),var(--gold-lo))}
+.stock-head h2{font-family:'Noto Serif TC','Microsoft JhengHei',serif!important;letter-spacing:1px}
+.stock-code{border-color:#5a4a28!important;color:var(--gold)!important;background:rgba(212,176,98,.06)}
+/* 分頁切換：選中＝金底黑字 */
+[data-testid="stButtonGroup"] button{background:#121110!important;border-color:#3a3326!important;color:#cfc8b8!important;transition:all .15s}
+[data-testid="stButtonGroup"] button:hover{border-color:var(--gold)!important;color:var(--gold-hi)!important}
+html body .stApp [data-testid="stButtonGroup"] button[aria-checked="true"],html body .stApp [data-testid="stButtonGroup"] button[aria-pressed="true"],
+html body .stApp [data-testid="stButtonGroup"] [data-variant="segmented_control"][data-selected]{background:linear-gradient(180deg,#e9cf86,#c9a552)!important;
+  border-color:#e9cf86!important;color:#0b0a08!important;box-shadow:0 2px 12px rgba(212,176,98,.25)}
+html body .stApp [data-testid="stButtonGroup"] button[aria-checked="true"] p,html body .stApp [data-testid="stButtonGroup"] button[aria-pressed="true"] p{color:#0b0a08!important;font-weight:700!important}
+/* 一般按鈕、下拉 */
+[data-testid="stButton"] button,[data-testid="stPopover"] button{background:linear-gradient(180deg,#1b1914,#121110)!important;border:1px solid #4a3f27!important;color:#e6cb84!important}
+[data-testid="stButton"] button:hover,[data-testid="stPopover"] button:hover{border-color:var(--gold)!important;color:var(--gold-hi)!important;box-shadow:0 0 0 1px rgba(212,176,98,.2)}
+[data-baseweb="select"]>div,.st-key-stock_search [role="group"],[data-testid="stSelectbox"] [role="group"]{background:#100f0d!important;border-color:#3a3326!important}
+[data-testid="stSelectbox"] [role="group"]:focus-within{border-color:var(--gold)!important}
+[data-testid="stSelectbox"] input[role="combobox"]{color:#ece6d8!important;background:transparent!important}
+/* 表格 */
+table.acct th,.sig-wrap th{background:#17150f!important;color:#d9be78!important;letter-spacing:.5px;border-bottom:1px solid #3a3326!important}
+table.acct td{border-bottom-color:#1f1c16!important}
+.sig-wrap,.hist-head{border-color:var(--line)!important}
+/* 狀態列 */
+.strip{background:#12110e!important;border-color:#2f2a1f!important}
+.strip.ok{border-color:#3c5a3a!important}
+.note-line{border-top-color:#2a261d!important}
+/* 捲軸 */
+*::-webkit-scrollbar{width:9px;height:9px}*::-webkit-scrollbar-track{background:#0c0b09}
+*::-webkit-scrollbar-thumb{background:#3a3326;border-radius:6px;border:2px solid #0c0b09}*::-webkit-scrollbar-thumb:hover{background:#6b5a33}
+/* 展開區 */
+[data-testid="stExpander"] details{background:#100f0d!important;border:1px solid #2f2a1f!important;border-radius:10px!important}
+[data-testid="stExpander"] summary p{color:#d9be78!important}
+</style>"""
+
+
 SPLASH_CSS="""<style>
-.st-key-cqr_splash{position:fixed!important;inset:0;z-index:99990;background:#05070b}
+.st-key-cqr_splash{position:fixed!important;inset:0;z-index:99990;background:#050505}
 .st-key-cqr_splash [data-testid="stVideo"],.st-key-cqr_splash [data-testid="stElementContainer"]{position:static!important}
-.st-key-cqr_splash video{position:fixed!important;inset:0;width:100vw!important;height:100vh!important;max-width:none!important;object-fit:cover;pointer-events:none;background:#05070b}
+.st-key-cqr_splash video{position:fixed!important;inset:0;width:100vw!important;height:100vh!important;max-width:none!important;object-fit:cover;pointer-events:none;background:#050505}
 .st-key-cqr_splash video::-webkit-media-controls,.st-key-cqr_splash video::-webkit-media-controls-enclosure,.st-key-cqr_splash video::-webkit-media-controls-panel{display:none!important}
 .cqr-scrim{position:fixed;inset:0;z-index:99991;pointer-events:none;background:linear-gradient(to top,rgba(5,7,11,.94) 0%,rgba(5,7,11,.62) 26%,rgba(5,7,11,0) 56%),radial-gradient(ellipse at center,rgba(5,7,11,0) 55%,rgba(5,7,11,.55) 100%)}
 .cqr-splash-text{position:fixed;left:0;right:0;bottom:11vh;z-index:99992;text-align:center;pointer-events:none}
-.cqr-eyebrow{letter-spacing:7px;color:#d7bf84;font-size:13px;margin-bottom:8px}
-.cqr-title{font-size:clamp(30px,4vw,56px);font-weight:700;color:#f6ecca;letter-spacing:3px;text-shadow:0 2px 24px rgba(0,0,0,.8)}
-.cqr-sub{margin-top:10px;color:#cdd6e4;font-size:17px;text-shadow:0 1px 10px rgba(0,0,0,.9)}
+.cqr-eyebrow{letter-spacing:7px;color:#d4b062;font-size:13px;margin-bottom:8px}
+.cqr-title{font-size:clamp(30px,4vw,56px);font-weight:700;color:#f7e7b8;letter-spacing:3px;text-shadow:0 2px 24px rgba(0,0,0,.8)}
+.cqr-sub{margin-top:10px;color:#d6cfbf;font-size:17px;text-shadow:0 1px 10px rgba(0,0,0,.9)}
 .cqr-bar{width:min(440px,60vw);height:3px;margin:20px auto 0;background:rgba(255,255,255,.16);overflow:hidden;border-radius:3px}
-.cqr-bar i{display:block;width:38%;height:100%;background:linear-gradient(90deg,transparent,#d7bf84,transparent);animation:cqr-slide 1.7s infinite ease-in-out}
+.cqr-bar i{display:block;width:38%;height:100%;background:linear-gradient(90deg,transparent,#d4b062,transparent);animation:cqr-slide 1.7s infinite ease-in-out}
 @keyframes cqr-slide{0%{transform:translateX(-120%)}100%{transform:translateX(330%)}}
-.cqr-elapsed{position:fixed;left:0;right:0;bottom:6vh;z-index:99992;text-align:center;color:#aebbcd;font-size:14px;text-shadow:0 1px 8px rgba(0,0,0,.9);pointer-events:none}
+.cqr-elapsed{position:fixed;left:0;right:0;bottom:6vh;z-index:99992;text-align:center;color:#b6af9f;font-size:14px;text-shadow:0 1px 8px rgba(0,0,0,.9);pointer-events:none}
 .st-key-cqr_skip{position:fixed!important;right:28px;bottom:24px;z-index:99993;width:auto!important}
-.st-key-cqr_skip button{background:rgba(10,14,20,.55)!important;border:1px solid rgba(215,191,132,.5)!important;color:#e9d9a8!important;backdrop-filter:blur(4px)}
+.st-key-cqr_skip button{background:rgba(10,14,20,.55)!important;border:1px solid rgba(215,191,132,.5)!important;color:#ecd59a!important;backdrop-filter:blur(4px)}
 .st-key-cqr_skip button:hover{background:rgba(215,191,132,.22)!important}
 .block-container{animation:cqr-fade .55s ease-out}
 @keyframes cqr-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -2399,15 +2462,15 @@ LAYOUT_CSS="""<style>
 [data-testid="stHorizontalBlock"]:has(.brand) [data-testid="stButtonGroup"] button p{font-size:15px!important}
 [data-testid="stMarkdownContainer"]:has(.metric-row),[data-testid="stMarkdownContainer"]:has(.hn-head){margin-bottom:0!important}
 .metric-row{display:grid!important;grid-template-columns:1fr 1fr!important;gap:12px!important;height:auto!important;margin:0!important}
-.metric{min-height:0!important;height:72px;padding:10px 16px!important;display:flex;flex-direction:column;justify-content:center;border-left:3px solid #35435a!important}
-.metric:first-child{border-left-color:#d7bf84!important}
+.metric{min-height:0!important;height:72px;padding:10px 16px!important;display:flex;flex-direction:column;justify-content:center;border-left:3px solid #40382a!important}
+.metric:first-child{border-left-color:#d4b062!important}
 .metric-label{font-size:13px!important;line-height:1.3!important}
 .metric-value{font-size:25px!important;line-height:1.3!important}
 .stElementContainer:has(.metric-row){height:auto!important;min-height:0!important}
 .stElementContainer:has(.note-line){height:22px!important;min-height:22px!important}
 .section.lead{height:46px!important}.stElementContainer:has(.section.lead){height:46px!important;min-height:46px!important}
 .section{align-items:center!important}
-.note-line{height:22px!important;line-height:22px!important;font-size:12px!important;color:#7f8ea3!important;border-top:1px solid #1d2733;margin-top:2px;padding-top:2px}
+.note-line{height:22px!important;line-height:22px!important;font-size:12px!important;color:#8a8374!important;border-top:1px solid #211e18;margin-top:2px;padding-top:2px}
 @media(max-width:1000px){.metric-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
 .st-key-pick_head [data-testid="stButtonGroup"]{justify-content:flex-end}
 .st-key-pick_head [data-testid="stButtonGroup"] button{height:34px!important;min-height:34px!important;padding:0 12px!important}
@@ -2415,9 +2478,9 @@ LAYOUT_CSS="""<style>
 .brand-title{white-space:nowrap}
 @media(max-width:1480px){.brand-title{font-size:24px!important}.st-key-module_nav [data-testid="stButtonGroup"] button{padding:0 10px!important}}
 .st-key-module_nav [data-testid="stButtonGroup"]{justify-content:flex-end}
-.st-key-module_nav [data-testid="stButtonGroup"] button{height:40px!important;min-height:40px!important;padding:0 16px!important;border-color:#4a3f27!important}
+.st-key-module_nav [data-testid="stButtonGroup"] button{height:40px!important;min-height:40px!important;padding:0 16px!important;border-color:#5a4a28!important}
 .st-key-module_nav [data-testid="stButtonGroup"] button p{font-size:15px!important;font-weight:650!important;letter-spacing:1px}
-.st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"],.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"]{background:linear-gradient(180deg,#d7bf84,#b99a58)!important;border-color:#d7bf84!important}
+.st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"],.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"]{background:linear-gradient(180deg,#d4b062,#b99a58)!important;border-color:#d4b062!important}
 .st-key-module_nav [data-testid="stButtonGroup"] button[aria-checked="true"] p,.st-key-module_nav [data-testid="stButtonGroup"] button[kind$="Active"] p{color:#15110a!important}
 /* ---- 字級：全面放大小字（最小 14px），維持既有版面高度 ---- */
 .eyebrow{font-size:12px!important}
@@ -2472,9 +2535,9 @@ LAYOUT_CSS="""<style>
 
 
 GATE_CSS="""<style>
-.st-key-cqr_gate{max-width:420px;margin:16vh auto 0;padding:26px 28px 22px;border:1px solid #2c3746;border-radius:14px;background:linear-gradient(145deg,#141c27,#0d131c);box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.st-key-cqr_gate{max-width:420px;margin:16vh auto 0;padding:26px 28px 22px;border:1px solid #352f22;border-radius:14px;background:linear-gradient(145deg,#19170f,#0d131c);box-shadow:0 24px 60px rgba(0,0,0,.55)}
 .st-key-cqr_gate [data-testid="stBaseButton-primaryFormSubmit"] p{color:#15110a!important;font-weight:700;font-size:17px}
-.cqr-gate-title{font-size:24px;font-weight:700;color:#f1e6c4;letter-spacing:1px;margin:2px 0 4px}.cqr-gate-sub{color:#8fa0b6;font-size:14px;margin-bottom:10px}
+.cqr-gate-title{font-size:24px;font-weight:700;color:#f1e6c4;letter-spacing:1px;margin:2px 0 4px}.cqr-gate-sub{color:#9a9383;font-size:14px;margin-bottom:10px}
 </style>"""
 
 
@@ -2501,10 +2564,14 @@ def auth_gate():
 
 
 def main():
-    st.set_page_config(page_title="CQR｜全市場動能決策臺",page_icon="◈",layout="wide",initial_sidebar_state="collapsed")
+    icon=Path(__file__).resolve().parent/"brand_icon.png"
+    st.set_page_config(page_title="CQR｜全市場動能決策臺",page_icon=str(icon) if icon.exists() else "◈",layout="wide",initial_sidebar_state="collapsed")
     # 各段 CSS 合併為單一 <style>：用 </style><style> 直接相接時，瀏覽器會把中間當成文字，每段的第一條規則都會被吃掉。
-    merged="".join(re.sub(r"</?style>","",block) for block in (CSS,COMPACT_CSS,READABLE_CSS,CHIP_CSS,SPLASH_CSS,huanan_panel.CSS,xiao_panel.CSS,LAYOUT_CSS))
-    st.markdown(("<style>"+merged+"</style>").replace("\n\n","\n"),unsafe_allow_html=True)
+    merged="".join(re.sub(r"</?style>","",block) for block in (CSS,COMPACT_CSS,READABLE_CSS,CHIP_CSS,SPLASH_CSS,huanan_panel.CSS,xiao_panel.CSS,LAYOUT_CSS,LUXURY_CSS))
+    imp=r"@import\s+url\([^)]*\)\s*;"                               # 網址內可能有分號，必須以括號判斷結尾
+    imports="".join(re.findall(imp,merged))                         # @import 必須放在樣式表最前面才會生效
+    merged=re.sub(imp,"",merged)
+    st.markdown(re.sub(r"\n\s*\n+","\n","<style>"+imports+merged+"</style>"),unsafe_allow_html=True)   # 空行會讓 Markdown 提早結束 HTML 區塊
     if not auth_gate():return
     with st.container(key="dimensions"):
         viewport=viewport_component()(key="cq_dimensions",default={"width":1440,"height":900})

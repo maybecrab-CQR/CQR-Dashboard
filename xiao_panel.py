@@ -36,16 +36,16 @@ STATES = {  # 狀態 → (顯示文字, 排序, CSS 類別)
 
 CSS = """<style>
 .sig-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 8px}
-.sig-head b{font-size:19px;color:#eef1f6}.sig-head span{font-size:12px;color:#8fa0b6}
+.sig-head b{font-size:19px;color:#f3eee2}.sig-head span{font-size:12px;color:#9a9383}
 .sig-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:10px}
-.sig-card{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:10px;padding:8px 12px}
-.sig-card span{display:block;font-size:12px;color:#929fb1}.sig-card b{font-size:22px;color:#e8edf6}
-.sig-wrap{overflow:auto;border:1px solid #293442;border-radius:10px}
+.sig-card{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:8px 12px}
+.sig-card span{display:block;font-size:12px;color:#9b9484}.sig-card b{font-size:22px;color:#f0eadb}
+.sig-wrap{overflow:auto;border:1px solid #332d21;border-radius:10px}
 .sig-wrap table.acct{border:0;border-radius:0}.sig-wrap th{position:sticky;top:0;z-index:2}
 .sig-badge{display:inline-block;border-radius:12px;padding:2px 9px;font-size:13px;white-space:nowrap}
-.sig-hot{background:#4a1f22;color:#ffb3b5;border:1px solid #a8474b}.sig-warm{background:#3b3423;color:#efc979;border:1px solid #67583b}
-.sig-info{background:#1c2d42;color:#9cc7f5;border:1px solid #35557a}.sig-idle{background:#1a2431;color:#a9b6c9;border:1px solid #344353}
-.sig-muted{background:#141b25;color:#6f7d90;border:1px solid #263140}
+.sig-hot{background:#4a1f22;color:#ffb3b5;border:1px solid #a8474b}.sig-warm{background:#3b3423;color:#e3c06a;border:1px solid #67583b}
+.sig-info{background:#1c2d42;color:#9cc7f5;border:1px solid #35557a}.sig-idle{background:#1d1b16;color:#b2ab9b;border:1px solid #3d3527}
+.sig-muted{background:#141b25;color:#7b7466;border:1px solid #2f2a1f}
 .sig-cards.six{grid-template-columns:repeat(6,minmax(0,1fr))}.sig-cards.six .sig-card b{font-size:19px!important;white-space:nowrap}
 .sig-warn{background:#3d2a12;color:#ffc46b;border:1px solid #8a5a1c;flex:none}
 .sig-hint{display:inline-block;border-radius:12px;padding:1px 8px;font-size:13px;white-space:nowrap;flex:none;cursor:help;
@@ -53,33 +53,33 @@ background:#241f38;color:#d2c3ff;border:1px solid #5b4a8f;margin:2px 4px 0 0}
 .sig-hint.up{background:#3a1d22;color:#ffb3b5;border-color:#8a3f45}
 .sig-card em{display:block;font-style:normal;font-size:13px;color:#b9a9f0;margin-top:1px;white-space:nowrap}
 .hist-stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:2px 0 6px}
-.hist-stats>div{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:9px;padding:5px 10px;min-width:0}
-.hist-stats span{display:block;font-size:13px;color:#929fb1}.hist-stats b{font-size:18px;color:#e8edf6;white-space:nowrap;font-variant-numeric:tabular-nums}
-.hist-rule{font-size:13px;color:#8fa0b6;line-height:1.4;margin:0 0 6px;height:86px;overflow:auto}.hist-rule b{color:#cfb679;margin-right:6px;font-weight:600}
-.hist-head{background:linear-gradient(115deg,#141c27,#0f151f);border:1px solid #263140;border-radius:10px;padding:6px 12px;margin:0 0 6px;height:72px;overflow:hidden}
-.hist-title{display:flex;align-items:baseline;gap:8px;font-size:15px;color:#9fb0c4;white-space:nowrap}.hist-title b{font-size:19px;color:#eef2f8}
-.hist-title i{font-style:normal;font-size:13px;color:#7f8fa3}.hist-title em{margin-left:auto;font-style:normal;font-size:20px;font-weight:700}
-.hist-legs{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c9d3e0;line-height:1.45;font-variant-numeric:tabular-nums}
-.hist-legs span{color:#cfb679;margin-right:5px}
+.hist-stats>div{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:9px;padding:5px 10px;min-width:0}
+.hist-stats span{display:block;font-size:13px;color:#9b9484}.hist-stats b{font-size:18px;color:#f0eadb;white-space:nowrap;font-variant-numeric:tabular-nums}
+.hist-rule{font-size:12.5px;color:#a8a191;line-height:1.45;margin:0 0 6px;height:86px;overflow:auto;padding:5px 9px;border:1px solid #2f2a1f;border-radius:8px;background:#100f0d}.hist-rule b{color:#c9a552;margin-right:6px;font-weight:600}
+.hist-head{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:6px 12px;margin:0 0 6px;height:72px;overflow:hidden}
+.hist-title{display:flex;align-items:baseline;gap:8px;font-size:15px;color:#a8a191;white-space:nowrap}.hist-title b{font-size:19px;color:#f4eee0}
+.hist-title i{font-style:normal;font-size:13px;color:#8a8374}.hist-title em{margin-left:auto;font-style:normal;font-size:20px;font-weight:700}
+.hist-legs{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d2cbbb;line-height:1.45;font-variant-numeric:tabular-nums}
+.hist-legs span{color:#c9a552;margin-right:5px}
 .hist-head .up{color:#f17c7e}.hist-head .down{color:#55c8a4}
-.sig-guide{font-size:14px;color:#aebbd0;margin:2px 0 6px;line-height:1.5}.sig-guide b{color:#ffb3b5}.sig-guide i{font-style:normal;color:#efc979}
+.sig-guide{font-size:14px;color:#b6af9f;margin:2px 0 6px;line-height:1.5}.sig-guide b{color:#ffb3b5}.sig-guide i{font-style:normal;color:#e3c06a}
 @media(max-width:1100px){.hist-stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.sig-ev{color:#9fb0c4;font-size:12px;white-space:normal;margin-top:3px;line-height:1.35;max-width:300px}
-.sig-sel td{background:#2a2b24!important}.sig-ok{color:#f17c7e}.sig-no{color:#55667a}
-.sig-note{font-size:12px;color:#7f8ea3;margin-top:6px}
+.sig-ev{color:#a8a191;font-size:12px;white-space:normal;margin-top:3px;line-height:1.35;max-width:300px}
+.sig-sel td{background:#2a2416!important}.sig-ok{color:#f17c7e}.sig-no{color:#665f52}
+.sig-note{font-size:12px;color:#8a8374;margin-top:6px}
 .sig-wrap table.acct{font-size:14px}.sig-wrap td:nth-child(-n+4),.sig-wrap th:nth-child(-n+4){text-align:left!important}
 .sig-flag{font-size:12px;margin-right:3px}
 @media(max-width:1100px){.sig-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 [data-testid="stMarkdownContainer"]:has(.sx-bar){margin-bottom:0!important}
-.sx-bar{height:84px;box-sizing:border-box;padding:8px 12px;border:1px solid #293442;border-radius:10px;background:linear-gradient(115deg,#141c27,#0f151f);display:flex;flex-direction:column;justify-content:space-between}
+.sx-bar{height:84px;box-sizing:border-box;padding:8px 12px;border:1px solid #332d21;border-radius:10px;background:linear-gradient(115deg,#19170f,#0c0b0a);display:flex;flex-direction:column;justify-content:space-between}
 .sx-top{display:flex;align-items:center;gap:12px;min-width:0}
 .sx-top .sig-badge{font-size:16px;font-weight:700;flex:none}
-.sx-note{flex:1;min-width:0;font-size:15px;color:#c0ccdc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sx-num{flex:none;font-size:18px;color:#eef2f8;font-variant-numeric:tabular-nums}.sx-num i{font-style:normal;font-size:14px;color:#94a3b6;margin-right:5px}
+.sx-note{flex:1;min-width:0;font-size:15px;color:#cbc4b4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sx-num{flex:none;font-size:18px;color:#f4eee0;font-variant-numeric:tabular-nums}.sx-num i{font-style:normal;font-size:14px;color:#9e9787;margin-right:5px}
 .sx-chips{display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden}
-.sx-chip{font-size:14px;padding:1px 8px;border-radius:10px;border:1px solid #2b3747}
-.sx-chip.ok{color:#f6b0b2;border-color:#6b3437;background:#2a1719}.sx-chip.no{color:#7a8a9e;background:#121923}
-.sx-stamp{margin-left:auto;font-size:13px;color:#7f8fa3}
+.sx-chip{font-size:14px;padding:1px 8px;border-radius:10px;border:1px solid #352f22}
+.sx-chip.ok{color:#f6b0b2;border-color:#6b3437;background:#2a1719}.sx-chip.no{color:#868070;background:#121110}
+.sx-stamp{margin-left:auto;font-size:13px;color:#8a8374}
 .sig-head b{font-size:21px!important}.sig-head span{font-size:14px!important}
 .sig-card span{font-size:14px!important}.sig-card b{font-size:24px!important}
 .sig-wrap table.acct{font-size:16px!important}.sig-ev{font-size:14px!important}.sig-note{font-size:14px!important}.sig-badge{font-size:14px!important}
@@ -281,7 +281,7 @@ def hint_badges(hints, skip=()):
         if k in skip:
             continue
         who, side, help_ = xs.HINTS.get(k, ("", "down", ""))
-        tip = f"{'林教授' if who == '林' else '廖崧沂 2.0'}參考提醒：{help_}"
+        tip = f"{ {'林': '林教授', '蕭': '蕭明道'}.get(who, '廖崧沂 2.0')}參考提醒：{help_}"
         out += f'<span class="sig-hint{" up" if side == "up" else ""}" title="{escape(tip)}">{escape(who)}｜{escape(k)}</span>'
     return out
 
@@ -410,7 +410,7 @@ def render_v2(cands, selected_code, workspace, history=None):
     st.markdown(f'<div class="sig-wrap" style="max-height:{avail - 95}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
     with st.expander("規則與徽章說明"):
         st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
-                    '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出一半）。'
+                    '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出 1/3）。'
                     '完整的歷史交易與績效見「回測紀錄」。v2：攻擊後回檔量縮、凹洞量轉折買，樣本少。回測不保證未來，請以前瞻紀錄為準。<br>'
                     '<span class="sig-hint">紫色</span>／<span class="sig-hint up">紅色</span>徽章＝林教授、廖崧沂 2.0 的參考提醒（偏空／偏多），'
                     '不影響訊號與紀錄；滑鼠移到徽章上可看規則與回測結論。回測顯示當成固定出場規則會降低報酬，持股可當減碼或提高警覺的參考。</div>', unsafe_allow_html=True)
