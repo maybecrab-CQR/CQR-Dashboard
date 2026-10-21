@@ -207,6 +207,7 @@ def _live_v2(cands):
         raise RuntimeError("Yahoo 未回傳大盤資料")
     idx = daily["^TWII"]["Close"].copy()
     idx.index = pd.DatetimeIndex(idx.index.date)
+    idx = idx[idx > 0]          # 批次下載時大盤最後一列常是空值（當天尚未補齊）；空值比較會被當成「空頭」，必須先去掉
     data = {}
     for c in cands:
         d = daily.get(c["ticker"])
@@ -357,7 +358,7 @@ def render_v2(cands, selected_code, workspace, history=None):
     asof = str(scan["date"].iloc[0]) if not scan.empty else "—"
     bull = bool(scan["mkt_bull"].iloc[0]) if "mkt_bull" in scan and not scan.empty else None
     scan["order"] = scan["state"].map(lambda k: V2_STATE.get(k, ("", "", 9))[2])
-    today = scan[scan.state.isin(["signal3", "signal", "setup"])].sort_values(["order", "sec_rank"])
+    today = scan[scan.state.isin(["signal3", "signal", "setup", "wave"])].sort_values(["order", "sec_rank"])
     n = lambda k: int((scan.state == k).sum())
     f3, f2 = _read_csv("forward_status_v3.csv"), _read_csv("forward_status.csv")
     t3, c3, s3 = _fwd_stats(f3)
@@ -392,7 +393,7 @@ def render_v2(cands, selected_code, workspace, history=None):
         return
     st.markdown('<div class="sig-guide"><b>v3／v2 訊號</b>＝今天收盤可買（停損欄是失敗出場價）；'
                 '<i>量縮整理中</i>＝放入觀察，等它轉成訊號才買，不要提前進場。'
-                '波段進行中的股票不列在這裡（已經在漲，未持有不追）。</div>', unsafe_allow_html=True)
+                '<span style="color:#9cc7f5">波段進行中</span>＝已經在漲：持股續抱，未持有不追，等它量縮回檔變成整理再看。</div>', unsafe_allow_html=True)
     head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "族群內", "股期"])
     body = ""
     for r in today.itertuples():
@@ -406,7 +407,7 @@ def render_v2(cands, selected_code, workspace, history=None):
                  f'<td><span class="sig-badge {cls}">{label}</span>{note}</td><td>{_fmt(r.close)}</td><td>{_fmt(r.stop)}</td>'
                  f"<td>{_fmt(r.high)}</td><td>{_fmt(r.sec_rank, 0)}</td><td>{escape(fut)}</td></tr>")
     if not body:
-        body = '<tr><td class="empty" colspan="9">今天沒有訊號或量縮整理中的股票</td></tr>'
+        body = '<tr><td class="empty" colspan="9">今天沒有訊號、量縮整理或波段進行中的股票</td></tr>'
     st.markdown(f'<div class="sig-wrap" style="max-height:{avail - 95}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
     with st.expander("規則與徽章說明"):
         st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
