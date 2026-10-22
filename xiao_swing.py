@@ -315,6 +315,15 @@ def _part_label(p):
     return "全部出場" if p >= 0.999 else ("出一半" if abs(p - 0.5) < 1e-6 else ("出 1/3" if abs(p - 1 / 3) < 1e-6 else f"出 {p:.0%}"))
 
 
+def pending_exit(x, e, stop, **kw):
+    """今天收盤是否已觸發出場（明天開盤要賣）。exit_path 只檢查到倒數第二根（出場要在下一根開盤），
+    這裡在尾端補一根假 K 棒讓今天也被檢查；回傳 [(比例, 原因)]，沒有就是空串列。"""
+    y = pd.concat([x, x.iloc[[-1]]])
+    y.index = list(x.index) + [x.index[-1] + pd.Timedelta(days=1)]
+    n = len(x)
+    return [(w, r) for k, w, r in exit_path(y, e, stop, **kw) if k == n and not r.startswith("持有")]
+
+
 def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False, fire=False, diverge=False, half=None, part=None):
     """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。沒有出場訊號時最後一筆為「持有中」。
     max_hold=None（預設）：不設持有天數上限（漲時不預設頂），只依出場訊號離場。

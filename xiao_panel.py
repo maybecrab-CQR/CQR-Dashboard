@@ -55,8 +55,9 @@ background:#241f38;color:#d2c3ff;border:1px solid #5b4a8f;margin:2px 4px 0 0}
 .hist-stats{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:2px 0 6px}
 .hist-stats>div{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:9px;padding:5px 10px;min-width:0}
 .hist-stats span{display:block;font-size:13px;color:#9b9484}.hist-stats b{font-size:18px;color:#f0eadb;white-space:nowrap;font-variant-numeric:tabular-nums}
-.hist-rule{font-size:12.5px;color:#a8a191;line-height:1.45;margin:0 0 6px;height:86px;overflow:auto;padding:5px 9px;border:1px solid #2f2a1f;border-radius:8px;background:#100f0d}.hist-rule b{color:#c9a552;margin-right:6px;font-weight:600}
-.hist-head{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:6px 12px;margin:0 0 6px;height:72px;overflow:hidden}
+.sig-card span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sig-card b{white-space:nowrap}
+.hist-rule{font-size:12.5px;color:#a8a191;line-height:1.45;margin:0 0 6px;height:72px;overflow:auto;padding:5px 9px;border:1px solid #2f2a1f;border-radius:8px;background:#100f0d}.hist-rule b{color:#c9a552;margin-right:6px;font-weight:600}
+.hist-head{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:6px 12px;margin:0 0 6px;min-height:66px;max-height:96px;overflow:hidden}
 .hist-title{display:flex;align-items:baseline;gap:8px;font-size:15px;color:#a8a191;white-space:nowrap}.hist-title b{font-size:19px;color:#f4eee0}
 .hist-title i{font-style:normal;font-size:13px;color:#8a8374}.hist-title em{margin-left:auto;font-style:normal;font-size:20px;font-weight:700}
 .hist-legs{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d2cbbb;line-height:1.45;font-variant-numeric:tabular-nums}
@@ -237,8 +238,8 @@ def _live_v2(cands):
         st_ = xs.today_state3(x, preferred=pref)
         checks = xs.checks_v3(x)
         checks["偏好族群"] = pref
-        rows.append({"date": last.date(), "code": c["code"], "name": c["name"], "sector": c["sector"], "state": st_["state"],
-                     "close": x.c.iat[-1], "stop": st_["stop"], "high": st_["high"], "sec_rank": rank.get(t, np.nan),
+        rows.append({"date": last.date(), "code": c["code"], "ticker": t, "name": c["name"], "sector": c["sector"], "state": st_["state"],
+                     "close": x.c.iat[-1], "stop": st_["stop"], "high": st_["high"], "sec_rank": rank.get(t, np.nan), "rs10": round(float(x.rs10.iat[-1]), 2),
                      "futures": "", "note": st_["note"], "warn": st_["warn"], "hints": st_["hints"],
                      "idx_below3": bool(x.idx_below3.iat[-1]), "mkt_bull": mkt_bull, "checks": checks,
                      "marks": _marks(x, pref)})
@@ -340,8 +341,21 @@ def _fwd_table(fwd, height):
     st.markdown(f'<div class="sig-wrap" style="max-height:{height}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
 
 
-def render_v2(cands, selected_code, workspace, history=None):
-    """前瞻紀錄頁：今日觀察（訊號與量縮整理）／回測紀錄（history 回呼，由 app 繪製表格與 K 線）／前瞻紀錄。"""
+def _fwd_summary(fwd):
+    """前瞻紀錄卡片：持有中檔數、持有中平均損益、浮盈／浮虧檔數、已出場勝率與平均。"""
+    if fwd is None or fwd.empty:
+        return [("持有中", "0 檔"), ("持有中平均損益", "—"), ("浮盈／浮虧", "—"), ("已出場", "0 筆"), ("已出場勝率／平均", "—")]
+    hold = fwd[fwd.status != "已出場"]
+    done = fwd[fwd.status == "已出場"]
+    g = hold.ret_gross * 100
+    return [("持有中", f"{len(hold)} 檔"), ("持有中平均損益", f"{g.mean():+.2f}%" if len(hold) else "—"),
+            ("浮盈／浮虧", f"{int((g > 0).sum())}／{int((g < 0).sum())}"), ("已出場", f"{len(done)} 筆"),
+            ("已出場勝率／平均", f"{(done.ret_net_stock > 0).mean() * 100:.0f}%／{done.ret_net_stock.mean() * 100:+.2f}%" if len(done) else "—")]
+
+
+def render_v2(cands, selected_code, workspace, history=None, picker=None):
+    """前瞻紀錄頁：今日觀察／回測紀錄／前瞻紀錄。
+    history(height)：app 繪製回測紀錄；picker(kind, df, height)：app 繪製可點選清單＋K 線（kind＝"today"｜"fwd"）。"""
     scan, source = _read_csv("latest_scan.csv"), "排程掃描（全市場，每個交易日 14:45 更新）"
     if scan is None:
         if not cands:
@@ -358,7 +372,10 @@ def render_v2(cands, selected_code, workspace, history=None):
     asof = str(scan["date"].iloc[0]) if not scan.empty else "—"
     bull = bool(scan["mkt_bull"].iloc[0]) if "mkt_bull" in scan and not scan.empty else None
     scan["order"] = scan["state"].map(lambda k: V2_STATE.get(k, ("", "", 9))[2])
-    today = scan[scan.state.isin(["signal3", "signal", "setup", "wave"])].sort_values(["order", "sec_rank"])
+    # 同一狀態內依個股 RS（10 日強於大盤 %）由強到弱：資金有限時先買最強的（docs 10.10：兩期回測都較好）
+    if "rs10" not in scan:
+        scan["rs10"] = np.nan
+    today = scan[scan.state.isin(["signal3", "signal", "setup", "wave"])].sort_values(["order", "rs10"], ascending=[True, False])
     n = lambda k: int((scan.state == k).sum())
     f3, f2 = _read_csv("forward_status_v3.csv"), _read_csv("forward_status.csv")
     t3, c3, s3 = _fwd_stats(f3)
@@ -378,23 +395,43 @@ def render_v2(cands, selected_code, workspace, history=None):
         if history is not None:
             history(max(420, workspace - 50))
         return
-    cards = [("大盤濾網（60MA）", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
-             ("量縮整理／波段進行中", f"{n('setup')}／{n('wave')}"), ("v3 紀錄（已出場）", f"{t3}（{c3}）"), ("v3 前瞻勝率／平均", s3)]
-    st.markdown('<div class="sig-cards six">' + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 22}px">{b}</b>'
-                                                        + (liao_txt if i == 0 else "") + "</div>"
-                                                        for i, (a, b) in enumerate(cards)) + "</div>", unsafe_allow_html=True)
+    def card_row(cards, first_extra=""):
+        st.markdown(f'<div class="sig-cards" style="grid-template-columns:repeat({len(cards)},minmax(0,1fr))">'
+                    + "".join(f'<div class="sig-card"><span>{a}</span><b style="font-size:{18 if len(str(b)) > 8 else 21}px">{b}</b>'
+                              + (first_extra if i == 0 else "") + "</div>" for i, (a, b) in enumerate(cards)) + "</div>", unsafe_allow_html=True)
+
     avail = max(360, workspace - 140)
     if view == "前瞻紀錄":
-        which = st.segmented_control("前瞻紀錄", ["v3 波段量啟動", "v2 凹洞量轉折"], default="v3 波段量啟動", key="fwd_which",
-                                     label_visibility="collapsed") or "v3 波段量啟動"
-        st.markdown('<div class="sig-guide">本機排程每天 14:45 實際記下的訊號（不是回測），用同一套出場規則追蹤到今天；'
-                    '這才是真正的樣本外成績。紫／紅徽章＝老師參考提醒。</div>', unsafe_allow_html=True)
-        _fwd_table(f3 if which.startswith("v3") else f2, avail - 50)
+        wcol, gcol = st.columns([1, 2.2], gap="small", vertical_alignment="center")
+        with wcol:
+            which = st.segmented_control("前瞻紀錄", ["v3 波段量啟動", "v2 凹洞量轉折"], default="v3 波段量啟動", key="fwd_which",
+                                         label_visibility="collapsed") or "v3 波段量啟動"
+        with gcol:
+            st.markdown('<div class="sig-guide" style="margin:0">本機排程每天 14:45 實際記下的訊號（不是回測），用同一套出場規則追蹤到今天，'
+                        '是真正的樣本外成績。點選任一筆看 K 線與進出場位置。</div>', unsafe_allow_html=True)
+        fwd = f3 if which.startswith("v3") else f2
+        card_row(_fwd_summary(fwd))
+        if fwd is None or fwd.empty:
+            st.markdown('<div class="sig-note">尚無紀錄。排程每個交易日 14:45 執行，出現訊號（且大盤為多頭）時才會記錄；累積 2～3 個月才有參考價值。</div>', unsafe_allow_html=True)
+        elif picker is not None:
+            picker("fwd", fwd, avail - 40)
+        else:
+            _fwd_table(fwd, avail - 50)
         return
+    cards = [("大盤濾網（60MA）", bull_txt), ("今日 v3 波段量啟動", n("signal3")), ("今日 v2 凹洞量轉折", n("signal")),
+             ("量縮整理／波段進行中", f"{n('setup')}／{n('wave')}"), ("v3 前瞻紀錄", f"{t3} 筆"), ("v3 前瞻勝率／平均", s3)]
+    card_row(cards, liao_txt)
     st.markdown('<div class="sig-guide"><b>v3／v2 訊號</b>＝今天收盤可買（停損欄是失敗出場價）；'
                 '<i>量縮整理中</i>＝放入觀察，等它轉成訊號才買，不要提前進場。'
-                '<span style="color:#9cc7f5">波段進行中</span>＝已經在漲：持股續抱，未持有不追，等它量縮回檔變成整理再看。</div>', unsafe_allow_html=True)
-    head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "族群內", "股期"])
+                '<span style="color:#9cc7f5">波段進行中</span>＝已經在漲：持股續抱，未持有不追，等它量縮回檔變成整理再看。點選任一檔看 K 線。</div>', unsafe_allow_html=True)
+    if picker is not None:
+        if today.empty:
+            st.info("今天沒有訊號、量縮整理或波段進行中的股票。")
+        else:
+            picker("today", today.assign(label=today.state.map(lambda k: V2_STATE.get(k, (k, "", 9))[0])), avail - 70)
+        _rules_note()
+        return
+    head = "".join(f"<th>{h}</th>" for h in ["代號", "名稱", "族群", "狀態／說明", "收盤", "停損", "高點", "個股RS%", "族群內", "股期"])
     body = ""
     for r in today.itertuples():
         label, cls, _ = V2_STATE.get(r.state, (r.state, "sig-idle", 9))
@@ -405,10 +442,15 @@ def render_v2(cands, selected_code, workspace, history=None):
         fut = r.futures if isinstance(getattr(r, "futures", ""), str) and r.futures else "—"
         body += (f"<tr{sel}><td>{escape(str(r.code))}</td><td>{escape(str(r.name))}</td><td>{escape(str(r.sector))}</td>"
                  f'<td><span class="sig-badge {cls}">{label}</span>{note}</td><td>{_fmt(r.close)}</td><td>{_fmt(r.stop)}</td>'
-                 f"<td>{_fmt(r.high)}</td><td>{_fmt(r.sec_rank, 0)}</td><td>{escape(fut)}</td></tr>")
+                 f"<td>{_fmt(r.high)}</td><td{' class=acct-up' if r.rs10 == r.rs10 and r.rs10 > 0 else ''}>{_fmt(r.rs10, 2, True)}</td>"
+                 f"<td>{_fmt(r.sec_rank, 0)}</td><td>{escape(fut)}</td></tr>")
     if not body:
-        body = '<tr><td class="empty" colspan="9">今天沒有訊號、量縮整理或波段進行中的股票</td></tr>'
+        body = '<tr><td class="empty" colspan="10">今天沒有訊號、量縮整理或波段進行中的股票</td></tr>'
     st.markdown(f'<div class="sig-wrap" style="max-height:{avail - 95}px"><table class="acct"><tr>{head}</tr>{body}</table></div>', unsafe_allow_html=True)
+    _rules_note()
+
+
+def _rules_note():
     with st.expander("規則與徽章說明"):
         st.markdown('<div class="sig-note">v3（主）：5MV 帶出 13MV 的第一天、34MV 上揚，當天強於大盤且收在上半部；站上並扣低 21MA、強於大盤、族群強且族群前三，'
                     '只做電子／重電／綠能 → 收盤買，停損前 3 日低點，出場同 v2（跌破 21MA、均線扣高、極限大量後量縮不見高先出 1/3）。'

@@ -1377,6 +1377,111 @@ def trade_frame(ticker,start,end):
     return pd.DataFrame()
 
 
+GRID_CSS={
+    ".ag-root-wrapper":{"background-color":"#0e0d0c !important","border":"1px solid #332d21 !important","border-radius":"10px !important"},
+    ".ag-header":{"background-color":"#17150f !important","color":"#d9be78 !important","font-size":"14px !important","border-bottom":"1px solid #3a3326 !important"},
+    ".ag-row":{"background-color":"#0f0e0d !important","color":"#e2dccd !important","font-size":"15px !important","border-bottom":"1px solid #1f1c16 !important"},
+    ".ag-row-odd":{"background-color":"#13120f !important"},".ag-row-hover":{"background-color":"#25221b !important"},
+    ".ag-row-selected":{"background-color":"#2a2416 !important","border-left":"3px solid #c9a552 !important"},
+    ".ag-body-viewport":{"background-color":"#0f0e0d !important"},
+    ".ag-cell,.ag-header-cell":{"padding-left":"5px !important","padding-right":"5px !important"}}
+PCT_FMT=JsCode("function(p){return p.value==null||isNaN(p.value)?'—':(p.value>0?'+':'')+Number(p.value).toFixed(2);}")
+PCT_STYLE=JsCode("function(p){return {color:p.value>0?'#f17c7e':p.value<0?'#55c8a4':'#cfc8b8',fontWeight:'600'};}")
+NUM_FMT=JsCode("function(p){return p.value==null||isNaN(p.value)?'—':Number(p.value).toLocaleString('en-US',{minimumFractionDigits:p.value>=1000?0:2,maximumFractionDigits:p.value>=1000?0:2});}")
+
+
+def pick_grid(show,key,height,widths,numeric=(),pct=(),flex=None,styles=None):
+    """可點選的暗金表格。show 必須有隱藏欄 _i；回傳被選取列的 _i（預設第一列）。"""
+    b=GridOptionsBuilder.from_dataframe(show)
+    b.configure_default_column(resizable=True,sortable=True,filter=False,suppressMovable=True,suppressHeaderMenuButton=True)
+    b.configure_selection("single",use_checkbox=False,pre_selected_rows=[0])
+    b.configure_grid_options(rowHeight=34,headerHeight=38,suppressCellFocus=True,animateRows=False,tooltipShowDelay=200,
+                             onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"))
+    b.configure_column("_i",hide=True)
+    for col,w in widths.items():b.configure_column(col,width=w,minWidth=max(40,w-10),tooltipField=col)
+    for col in numeric:b.configure_column(col,type=["numericColumn"],valueFormatter=NUM_FMT)
+    for col in pct:b.configure_column(col,type=["numericColumn"],valueFormatter=PCT_FMT,cellStyle=PCT_STYLE)
+    for col,js in (styles or {}).items():b.configure_column(col,cellStyle=JsCode(js))
+    if flex:b.configure_column(flex,flex=1)
+    resp=AgGrid(show,gridOptions=b.build(),height=height,theme="alpine",update_on=["selectionChanged"],fit_columns_on_grid_load=True,
+                key=f"{key}_{height}",allow_unsafe_jscode=True,custom_css=GRID_CSS)
+    rows=resp.get("selected_rows")
+    if rows is not None and len(rows):
+        return int(rows.iloc[0]["_i"] if isinstance(rows,pd.DataFrame) else rows[0]["_i"])
+    return int(show["_i"].iloc[0])
+
+
+def compact_chart(ticker,start,end,marks,levels,height,key,focus=None):
+    """精簡 K 線（不標扣抵箭頭、隱藏均價列）。focus：初始畫面要包含的日期（之前留 25 根）。"""
+    frame=trade_frame(ticker,start,end)
+    if frame.empty:
+        st.warning("這檔的 K 線目前取不到（可能已下市或 Yahoo 暫時無資料）。");return
+    pos=list(frame.index.strftime("%Y-%m-%d"))
+    s=pos.index(focus) if focus in pos else max(0,len(pos)-60)
+    view=max(45,len(pos)-max(0,s-25))
+    content=chart_html(frame,f"{ticker}-{key}","1d",max(200,height-150),tuple(marks),tuple(levels),view=view,annotate=False)
+    interactive_chart_component()(html=content,height=height,key=f"cc_{key}_{ticker}",default=None)
+
+
+def render_pick(kind,df,height):
+    """今日觀察（kind='today'）與前瞻紀錄（kind='fwd'）：左邊可點選清單，右邊 K 線與說明。"""
+    today=pd.Timestamp(taipei_now().date())
+    d=lambda t:pd.Timestamp(t).strftime("%Y-%m-%d")
+    left,right=st.columns([1.05,1],gap="small")
+    df=df.reset_index(drop=True)
+    if kind=="today":
+        show=pd.DataFrame({"_i":df.index,"狀態":df.label,"名稱":df.name.astype(str)+" "+df.code.astype(str),"族群":df.sector,
+                           "收盤":df.close,"停損":df.stop,"個股RS%":df.rs10,
+                           "提醒":df.get("hints",pd.Series("",index=df.index)).fillna("").str.replace("大盤破8/21/55","",regex=False).str.strip("、")})
+        state_js="function(p){const m={'v3 波段量啟動':'#ff9ea1','v2 凹洞量轉折':'#ff9ea1','量縮整理中':'#e3c06a','波段進行中':'#9cc7f5'};return {color:m[p.value]||'#b2ab9b',fontWeight:p.value.startsWith('v')?'700':'500'};}"
+        with left:i=pick_grid(show,"pick_today",height,{"狀態":104,"名稱":104,"族群":120,"收盤":72,"停損":72,"個股RS%":76},
+                              numeric=("收盤","停損"),pct=("個股RS%",),flex="提醒",styles={"狀態":state_js})
+        r=df.loc[i]
+        label=r.label;cls={"v3 波段量啟動":"up","v2 凹洞量轉折":"up"}.get(label,"")
+        hints=xiao_panel.hint_badges(r.get("hints",""),skip=("大盤破8/21/55",))
+        note=escape(str(r.note)) if isinstance(r.get("note"),str) else ""
+        stop=f"{r.stop:,.2f}" if r.stop==r.stop else "—";high=f"{r.high:,.2f}" if r.high==r.high else "—"
+        right.markdown(f'<div class="hist-head"><div class="hist-title"><b>{escape(str(r["name"]))}</b> {escape(str(r.code))} <i>{escape(str(r.sector))}</i>'
+                       f'<em class="{cls}" style="font-size:16px">{escape(label)}</em></div>'
+                       f'<div class="hist-legs"><div><span>收盤</span>{r.close:,.2f}　<span>停損</span>{stop}　<span>攻擊高點</span>{high}　<span>個股RS</span>{r.rs10:+.2f}%</div>'
+                       f'<div title="{note}">{note} {hints}</div></div></div>',unsafe_allow_html=True)
+        marks=[(d(r.date),"buy","今日訊號")] if label.startswith("v") else []
+        levels=[(float(r.stop),f"停損 {stop}","#ff8a8a")] if r.stop==r.stop else []
+        if r.high==r.high:levels.append((float(r.high),f"攻擊高點 {high}","#d4b062"))
+        tk=r.get("ticker") if isinstance(r.get("ticker"),str) else f"{r.code}.TW"
+        with right:compact_chart(tk,(today-pd.Timedelta(days=400)).strftime("%Y-%m-%d"),(today+pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+                                 marks,levels,max(300,height-80),"today",focus=d(r.date))
+        return
+    # 前瞻紀錄：持有中在前（依損益），已出場在後（依日期）
+    df=df.assign(_hold=(df.status!="已出場").astype(int),_pnl=df.ret_gross*100,date=pd.to_datetime(df.date))
+    df=df.sort_values(["_hold","_pnl","date"],ascending=[False,False,False]).reset_index(drop=True)
+    to_stop=(df.last_close/df.stop-1)*100
+    show=pd.DataFrame({"_i":df.index,"狀態":df.status,"訊號日":df.date.dt.strftime("%m-%d"),"名稱":df.name.astype(str)+" "+df.code.astype(str),
+                       "進場":df.close,"現價":df.last_close,"損益%":df._pnl,"天數":df.days,"距停損%":to_stop.where(df._hold==1),
+                       "出場原因／提醒":[(r.exit_reason if isinstance(r.exit_reason,str) and r.exit_reason else
+                                     (f"⚠ 明天開盤出場：{r.pending_exit}" if isinstance(getattr(r,"pending_exit",""),str) and r.pending_exit else
+                                      (r.hints if isinstance(getattr(r,"hints",""),str) else ""))) for r in df.itertuples()]})
+    with left:i=pick_grid(show,"pick_fwd",height,{"狀態":76,"訊號日":62,"名稱":104,"進場":72,"現價":72,"損益%":72,"天數":50,"距停損%":72},
+                          numeric=("進場","現價"),pct=("損益%","距停損%"),flex="出場原因／提醒",
+                          styles={"狀態":"function(p){return {color:p.value==='已出場'?'#8a8374':'#9cc7f5',fontWeight:'600'};}",
+                                  "出場原因／提醒":"function(p){return {color:String(p.value).startsWith('⚠')?'#ffb347':'#a8a191',fontWeight:String(p.value).startsWith('⚠')?'700':'400',fontSize:'14px'};}"})
+    r=df.loc[i];sig=pd.Timestamp(r.date);hold=r._hold==1
+    hints=xiao_panel.hint_badges(r.get("hints",""))
+    pend=r.get("pending_exit")
+    if isinstance(pend,str) and pend:hints=f'<b style="color:#ffb347">⚠ 明天開盤出場（{escape(pend)}）</b> '+hints
+    pnl=f'<em class="{"up" if r._pnl>0 else "down"}">{r._pnl:+.2f}%</em>'
+    right.markdown(f'<div class="hist-head"><div class="hist-title"><b>{escape(str(r["name"]))}</b> {escape(str(r.code))} <i>{escape(str(r.get("sector","")))}</i>{pnl}</div>'
+                   f'<div class="hist-legs"><div><span>進場</span>{sig:%Y-%m-%d} 收盤 {r.close:,.2f}　<span>停損</span>{r.stop:,.2f}　<span>現價</span>{r.last_close:,.2f}</div>'
+                   +(f'<div><span>持有中</span>{int(r.days)} 天，帳面損益（未扣成本）　{hints}</div>' if hold else
+                     f'<div><span>已出場</span>{int(r.days)} 天・{escape(str(r.exit_reason))}・扣成本 {r.ret_net_stock*100:+.2f}%</div>')+'</div></div>',unsafe_allow_html=True)
+    marks=[(d(sig),"buy",f"進場 {r.close:,.2f}")]
+    ex=r.get("exit_date")
+    if not hold and isinstance(ex,str) and ex:marks.append((ex[:10],"sell",f"出場 {r.ret_net_stock*100:+.1f}%"))
+    tk=r.ticker if isinstance(r.get("ticker"),str) else f"{r.code}.TW"
+    with right:compact_chart(tk,(sig-pd.Timedelta(days=300)).strftime("%Y-%m-%d"),(today+pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+                             marks,[(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],max(300,height-80),"fwd",focus=d(sig))
+
+
 def render_trade_history(height):
     """前瞻紀錄頁 →「回測紀錄」：每一筆歷史交易（進出場日期、價格、原因、報酬），點選後在 K 線上標出進出場點。"""
     if not HISTORY_FILE.exists():
@@ -1411,41 +1516,13 @@ def render_trade_history(height):
     show=pd.DataFrame({"_i":g.index,"訊號日":g.signal_date.dt.strftime("%Y-%m-%d"),"名稱":g.name+" "+g.code,
                        "進場":g.entry_price,"出場日":g.exit_date.dt.strftime("%m-%d"),"出場":g.exit_price,"天數":g.days,"報酬%":g.ret_net,"出場原因":g.exit_reason})
     body_h=max(360,height-120)
-    left,right=st.columns([1.08,1],gap="small")
+    left,right=st.columns([1.05,1],gap="small")
     left.markdown(rule_html,unsafe_allow_html=True)
-    b=GridOptionsBuilder.from_dataframe(show)
-    b.configure_default_column(resizable=True,sortable=True,filter=False,suppressMovable=True,suppressHeaderMenuButton=True)
-    b.configure_selection("single",use_checkbox=False,pre_selected_rows=[0])
-    b.configure_grid_options(rowHeight=34,headerHeight=38,suppressCellFocus=True,animateRows=False,tooltipShowDelay=200,
-                             onGridSizeChanged=JsCode("function(p){p.api.sizeColumnsToFit();}"))
-    b.configure_column("_i",hide=True)
-    num=JsCode("function(p){return p.value==null?'—':Number(p.value).toLocaleString('en-US',{minimumFractionDigits:p.value>=1000?0:2,maximumFractionDigits:p.value>=1000?0:2});}")
-    for col,w in (("訊號日",100),("名稱",112),("出場日",64),("天數",50)):
-        b.configure_column(col,width=w,minWidth=w-6,tooltipField=col)
-    for col in ("進場","出場"):
-        b.configure_column(col,width=72,minWidth=64,type=["numericColumn"],valueFormatter=num)
-    b.configure_column("出場原因",width=120,minWidth=90,flex=1,tooltipField="出場原因",
-        cellStyle=JsCode("function(p){return {color:p.value==='持有中'?'#9cc7f5':'#a8a191',fontSize:'14px'};}"))
-    b.configure_column("報酬%",width=72,minWidth=66,type=["numericColumn"],sort="desc" if res=="獲利" else None,
-        valueFormatter=JsCode("function(p){return (p.value>0?'+':'')+Number(p.value).toFixed(2);}"),
-        cellStyle=JsCode("function(p){return {color:p.value>0?'#f17c7e':p.value<0?'#55c8a4':'#cfc8b8',fontWeight:'600'};}"))
-    with left:
-        resp=AgGrid(show,gridOptions=b.build(),height=body_h-92,theme="alpine",update_on=["selectionChanged"],fit_columns_on_grid_load=True,
-            key=f"hist_grid_{k}_{per}_{res}_{body_h}",allow_unsafe_jscode=True,custom_css={
-                ".ag-root-wrapper":{"background-color":"#0e0d0c !important","border":"1px solid #332d21 !important","border-radius":"10px !important"},
-                ".ag-header":{"background-color":"#1b1914 !important","color":"#cfc8b8 !important","font-size":"14px !important"},
-                ".ag-row":{"background-color":"#0f0e0d !important","color":"#e2dccd !important","font-size":"15px !important","border-bottom":"1px solid #1f1d18 !important"},
-                ".ag-row-odd":{"background-color":"#13120f !important"},".ag-row-hover":{"background-color":"#25221b !important"},
-                ".ag-row-selected":{"background-color":"#2a2416 !important","border-left":"3px solid #c9a552 !important"},
-                ".ag-body-viewport":{"background-color":"#0f0e0d !important"},
-                ".ag-cell,.ag-header-cell":{"padding-left":"5px !important","padding-right":"5px !important"}})
-    rows=resp.get("selected_rows")
-    i=None
-    if rows is not None and len(rows):i=int(rows.iloc[0]["_i"] if isinstance(rows,pd.DataFrame) else rows[0]["_i"])
-    r=df.loc[i] if i is not None and i in df.index else g.iloc[0]
+    with left:i=pick_grid(show,f"hist_grid_{k}_{per}_{res}",body_h-80,{"訊號日":100,"名稱":112,"進場":72,"出場日":62,"出場":72,"天數":50,"報酬%":72},
+                          numeric=("進場","出場"),pct=("報酬%",),flex="出場原因",
+                          styles={"出場原因":"function(p){return {color:p.value==='持有中'?'#9cc7f5':'#a8a191',fontSize:'14px'};}"})
+    r=df.loc[i] if i in df.index else g.iloc[0]
     sig,ex=r.signal_date,r.exit_date
-    frame=trade_frame(r.ticker,(sig-pd.Timedelta(days=200)).strftime("%Y-%m-%d"),
-                      min(ex+pd.Timedelta(days=40),pd.Timestamp(taipei_now().date())+pd.Timedelta(days=1)).strftime("%Y-%m-%d"))
     open_=r.exit_reason=="持有中"
     half=f'　<span>減碼</span>{r.half_date:%m-%d} @ {r.half_price:,.2f}' if pd.notna(r.half_date) else ""
     head=(f'<div class="hist-title"><b>{escape(r["name"])}</b> {escape(r.code)} <i>{escape(str(r.sector))}</i>'
@@ -1454,19 +1531,13 @@ def render_trade_history(height):
           +(f'<div><span>持有中</span>{ex:%Y-%m-%d} 收盤 {r.exit_price:,.2f}・{r.days} 天（未扣成本）</div>' if open_ else
             f'<div><span>出場</span>{ex:%Y-%m-%d} 開盤 {r.exit_price:,.2f}・{r.days} 天・{escape(r.exit_reason)}</div>')+'</div>')
     right.markdown(f'<div class="hist-head">{head}</div>',unsafe_allow_html=True)
-    if frame.empty:
-        right.warning("這檔的歷史 K 線目前取不到（可能已下市或 Yahoo 暫時無資料）。");return
-    labels=frame.index.strftime("%Y-%m-%d")
     d=lambda t:t.strftime("%Y-%m-%d")
     marks=[(d(sig),"buy",f"進場 {r.entry_price:,.2f}")]
     if pd.notna(r.half_date):marks.append((d(r.half_date),"half",f"{xiao_panel.xs._part_label(xiao_panel.xs.PART_EXIT)} {r.half_price:,.2f}"))
     if not open_:marks.append((d(ex),"sell",f"出場 {r.exit_price:,.2f}"))
-    pos=list(labels)
-    start=pos.index(d(sig)) if d(sig) in pos else max(0,len(pos)-60)
-    view=max(40,len(pos)-max(0,start-20))
-    chart_h=max(300,body_h-78)
-    content=chart_html(frame,f"{r.ticker}-hist-{d(sig)}","1d",max(200,chart_h-150),tuple(marks),((float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a"),),view=view)
-    with right:interactive_chart_component()(html=content,height=chart_h,key=f"hist_chart_{r.ticker}_{d(sig)}",default=None)
+    end=min(ex+pd.Timedelta(days=40),pd.Timestamp(taipei_now().date())+pd.Timedelta(days=1))
+    with right:compact_chart(r.ticker,(sig-pd.Timedelta(days=200)).strftime("%Y-%m-%d"),end.strftime("%Y-%m-%d"),marks,
+                             [(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],max(300,body_h-78),f"hist-{d(sig)}",focus=d(sig))
 
 
 @st.fragment
@@ -1591,7 +1662,7 @@ def plotly_bundle():
 
 
 @st.cache_data(ttl=300,show_spinner=False,max_entries=32)
-def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60):
+def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60, annotate=True):
     """marks：((日期, 'v3'|'v2', 停損), ...) 歷史訊號標記；也可用 ((日期, 'buy'|'half'|'sell', 說明), ...) 標進出場點。
     levels：((價格, 標籤, 顏色), ...) 水平參考線。只用在日 K。view：初始顯示的 K 棒數。"""
     df = indicators(frame)
@@ -1626,7 +1697,7 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
             if not pts:continue
             up=kind=="buy"
             ys=[float(df.Low.iloc[p])*0.97 if up else float(df.High.iloc[p])*1.03 for p,_ in pts]
-            fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=ys,mode="markers+text",name=name,text=[t for _,t in pts],
+            fig.add_trace(go.Scatter(x=[p for p,_ in pts],y=ys,mode="markers" if kind=="half" else "markers+text",name=name,text=[t for _,t in pts],   # 減碼只標符號（滑鼠看價格），避免和出場文字重疊
                 textposition="bottom center" if up else "top center",textfont=dict(color=color,size=14),
                 marker=dict(symbol=symbol,size=17,color=color,line=dict(color="#0e0d0c",width=1)),
                 hovertemplate="%{text}<extra></extra>"),row=1,col=1)
@@ -1636,7 +1707,7 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
                 fig.add_hline(y=price,line=dict(color=color,width=1.2,dash="dash"),annotation_text=label,annotation_position="top left",
                               annotation_font=dict(color=color,size=13),row=1,col=1)
     # 下一根新增時會移出的第 -N 根：均價取收盤價，均量取成交量。
-    for row, periods, column, prefix in [(1,(3,10,21,52),"Close","MA"),(2,(5,13,34),"Volume","VMA")]:
+    for row, periods, column, prefix in ([(1,(3,10,21,52),"Close","MA"),(2,(5,13,34),"Volume","VMA")] if annotate else []):   # 回測紀錄圖不標扣抵箭頭，避免與進出場標記重疊
         for i,(n,color) in enumerate(zip(periods,colors)):
             if len(df)>=n:
                 fig.add_annotation(x=len(df)-n,y=float(df[column].iloc[-n]),xref="x" if row==1 else "x2",yref="y" if row==1 else "y2",
@@ -1662,6 +1733,8 @@ def chart_html(frame, ticker, interval, height=600, marks=(), levels=(), view=60
             "volume":values(df.Volume),"priceLines":[values(df[f"MA{n}"]) for n in (3,10,21,52)],
             "volumeLines":[values(df[f"VMA{n}"]) for n in (5,13,34)],"key":f"cq-viewport-v2-{ticker}-{interval}","height":height,"timeframe":interval,"view":int(view)}
     template = CHART_TEMPLATE.replace("__FIGURE__",json.dumps(payload).replace("</","<\\/"))
+    if not annotate:   # 精簡模式（回測／前瞻／今日觀察的小圖）：隱藏均價與扣抵數值列，把高度留給 K 線
+        template=template.replace("</head>","<style>#ma-values,#deduct-values{display:none!important}.ohlc b{font-size:17px!important}.ohlc span{font-size:12px!important}</style></head>",1)
     return template.replace("__META__",json.dumps(meta).replace("</","<\\/"))
 
 
@@ -2339,7 +2412,7 @@ def _dashboard(width,height):
             elif panel=="前瞻紀錄":
                 # 有排程掃描檔就直接讀；沒有（例如雲端）才即時算候選股
                 has_scan=(xiao_panel.LOG_DIR/"latest_scan.csv").exists()
-                xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace,history=render_trade_history)
+                xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace,history=render_trade_history,picker=render_pick)
             elif panel=="板塊選股":
                 if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
                 else:st.markdown(f'<div class="stock-head"><h2>{escape(name)}</h2><span class="stock-code">{escape(code)}</span></div>',unsafe_allow_html=True)
