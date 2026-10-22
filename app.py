@@ -1329,6 +1329,10 @@ def pick_grid(show,key,height,widths,numeric=(),pct=(),flex=None,styles=None):
     return int(show["_i"].iloc[0])
 
 
+CARD_H=80      # K 線上方說明卡／歷史回測規則框的固定高度（CSS .hist-head／.hist-rule 同步）
+PANE_GAP=8     # Streamlit 直排元件間距（COMPACT_CSS stVerticalBlock gap）
+
+
 def compact_chart(ticker,start,end,marks,levels,height,key,focus=None):
     """精簡 K 線（不標扣抵箭頭、隱藏均價列）。focus：初始畫面要包含的日期（之前留 25 根）。"""
     frame=trade_frame(ticker,start,end)
@@ -1368,7 +1372,7 @@ def render_pick(kind,df,height):
         if r.high==r.high:levels.append((float(r.high),f"攻擊高點 {high}","#d4b062"))
         tk=r.get("ticker") if isinstance(r.get("ticker"),str) else f"{r.code}.TW"
         with right:compact_chart(tk,(today-pd.Timedelta(days=400)).strftime("%Y-%m-%d"),(today+pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-                                 marks,levels,max(300,height-80),"today",focus=d(r.date))
+                                 marks,levels,height-CARD_H-PANE_GAP,"today",focus=d(r.date))
         return
     # 前瞻紀錄：持有中在前（依損益），已出場在後（依日期）
     df=df.assign(_hold=(df.status!="已出場").astype(int),_pnl=df.ret_gross*100,date=pd.to_datetime(df.date))
@@ -1397,7 +1401,7 @@ def render_pick(kind,df,height):
     if not hold and isinstance(ex,str) and ex:marks.append((ex[:10],"sell",f"出場 {r.ret_net_stock*100:+.1f}%"))
     tk=r.ticker if isinstance(r.get("ticker"),str) else f"{r.code}.TW"
     with right:compact_chart(tk,(sig-pd.Timedelta(days=300)).strftime("%Y-%m-%d"),(today+pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-                             marks,[(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],max(300,height-80),"fwd",focus=d(sig))
+                             marks,[(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],height-CARD_H-PANE_GAP,"fwd",focus=d(sig))
 
 
 def render_trade_history(height):
@@ -1436,7 +1440,7 @@ def render_trade_history(height):
     body_h=max(360,height-120)
     left,right=st.columns([1.05,1],gap="small")
     left.markdown(rule_html,unsafe_allow_html=True)
-    with left:i=pick_grid(show,f"hist_grid_{k}_{per}_{res}",body_h-80,{"訊號日":100,"名稱":112,"進場":72,"出場日":62,"出場":72,"天數":50,"報酬%":72},
+    with left:i=pick_grid(show,f"hist_grid_{k}_{per}_{res}",body_h-CARD_H-PANE_GAP,{"訊號日":100,"名稱":112,"進場":72,"出場日":62,"出場":72,"天數":50,"報酬%":72},
                           numeric=("進場","出場"),pct=("報酬%",),flex="出場原因",
                           styles={"出場原因":"function(p){return {color:p.value==='持有中'?'#9cc7f5':'#a8a191',fontSize:'14px'};}"})
     r=df.loc[i] if i in df.index else g.iloc[0]
@@ -1455,7 +1459,7 @@ def render_trade_history(height):
     if not open_:marks.append((d(ex),"sell",f"出場 {r.exit_price:,.2f}"))
     end=min(ex+pd.Timedelta(days=40),pd.Timestamp(taipei_now().date())+pd.Timedelta(days=1))
     with right:compact_chart(r.ticker,(sig-pd.Timedelta(days=200)).strftime("%Y-%m-%d"),end.strftime("%Y-%m-%d"),marks,
-                             [(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],max(300,body_h-78),f"hist-{d(sig)}",focus=d(sig))
+                             [(float(r.stop),f"停損 {r.stop:,.2f}","#ff8a8a")],body_h-CARD_H-PANE_GAP,f"hist-{d(sig)}",focus=d(sig))
 
 
 @st.fragment
@@ -2045,7 +2049,14 @@ def render_splash():
             st.rerun()
 
 
-@st.fragment(run_every="300s")
+@st.fragment(run_every="60s")
+def auto_refresh():
+    """每 5 分鐘自動整頁更新一次（排名、報價）。用整頁重跑而不是把儀表板做成 fragment：
+    Streamlit 的 fragment 局部重跑不會清掉巢狀欄位裡已不再使用的元件，切換頁籤後舊表格／K 線會殘留在頁面下方。"""
+    if clock.monotonic()-st.session_state.get("_last_full_run",0.0)>=300:
+        st.rerun()
+
+
 def dashboard(width,height):
     if os.environ.get("CQR_TIMING"):           # 只量時間：設定 CQR_TIMING=輸出檔
         t0=clock.perf_counter()
@@ -2250,7 +2261,7 @@ def _dashboard(width,height):
     left,right=st.columns([.40,.60],gap="medium")
     code=None;rs=None;selected=None
     sig_row=None;sig_stamp="—"
-    with left,st.container(key=f"lpane_{MODULES.index(module) if module in MODULES else 0}"):   # 左欄依模組分容器，切換時不殘留
+    with left:
         strategy=module==MODULES[1]
         search=stock_search(universe) if not universe.empty else None
         linked=False   # 搜尋個股是否已在表格中選取
@@ -2336,9 +2347,8 @@ def _dashboard(width,height):
         if not universe.empty:note+=f" · 名單 {roc_date(universe.list_date.min()).date()}"
         st.markdown(f'<div class="note-line" title="{escape("；".join(missing))}">{escape(note)}</div>',unsafe_allow_html=True)
     _tick("左欄")
-    pane_names=["K線量能","法人","資券","帳務資訊","選股看盤","訊號績效"]
-    # 右欄每個頁面放在各自有 key 的容器：切換頁面時整塊替換，避免上一頁元件殘留（fragment 重繪不會清掉欄內舊元件）
-    with right,st.container(key=f"rpane_{pane_names.index(panel) if panel in pane_names else 9}"):
+   # 右欄每個頁面放在各自有 key 的容器：切換頁面時整塊替換，避免上一頁元件殘留（fragment 重繪不會清掉欄內舊元件）
+    with right:
         if code:
             row=universe.loc[universe.code==code]
             name=stock_names.get(code,code)
@@ -2584,7 +2594,9 @@ def main():
     if not auth_gate():return
     with st.container(key="dimensions"):
         viewport=viewport_component()(key="cq_dimensions",default={"width":1440,"height":900})
+    st.session_state["_last_full_run"]=clock.monotonic()
     dashboard(int(viewport.get("width",1440)),int(viewport.get("height",900)))
+    auto_refresh()
 
 
 if __name__=="__main__":
