@@ -945,6 +945,30 @@ def repair_history17(symbols,days,limit=120):
 GROUPING_MODES=["產業鏈細分","官方產業別"]
 
 
+def _memo(name,deps,fn):
+    """同一份行情快照內，切換頁籤不重算：結果存在 session，依（名稱, 依賴值）查表；回傳 DataFrame 的複本，呼叫端可放心修改。
+    deps 用 id(groups) 等代表「同一份掃描結果」；背景更新產生新快照時 id 不同，自然重算。"""
+    memo=st.session_state.setdefault("_memo19",{})
+    key=(name,)+tuple(deps)
+    if key not in memo:
+        if len(memo)>60:memo.clear()
+        memo[key]=fn()
+    out=memo[key]
+    copy=lambda v:v.copy() if isinstance(v,pd.DataFrame) else v
+    return tuple(copy(v) for v in out) if isinstance(out,tuple) else copy(out)
+
+
+_TICK={"t":0.0}
+def _tick(label):
+    """效能量測（只在設定環境變數 CQR_TIMING_DETAIL=輸出檔 時記錄）：與上一個檢查點相隔的毫秒數。"""
+    path=os.environ.get("CQR_TIMING_DETAIL")
+    if not path:return
+    now=clock.perf_counter()
+    if label!="開始":
+        with open(path,"a",encoding="utf-8") as fh:fh.write(f"{st.session_state.get('module')}/{st.session_state.get('sig_view')}/{st.session_state.get('fwd_view')}\t{label}\t{(now-_TICK['t'])*1000:.0f}\n")
+    _TICK["t"]=now
+
+
 def sector_groups(universe,grouping="產業鏈細分"):
     """族群分組：產業鏈細分（櫃買中心產業價值鏈，一檔可屬多個族群）或官方產業別。回傳 [(族群名, 成分DataFrame)]。"""
     if grouping=="官方產業別":
@@ -2040,6 +2064,7 @@ def dashboard(width,height):
 
 
 def _dashboard(width,height):
+    _tick("開始")
     # 載入畫面要在畫任何東西之前就出現：用佔位元件先送出，掃描完成後再移除。
     splash_ph=st.empty()
     if not st.session_state.get('cqr_first_done') and not st.session_state.get('cqr_skip_splash'):
@@ -2080,6 +2105,7 @@ def _dashboard(width,height):
         else:
             pages=["選股看盤","訊號績效"]
             panel=xiao_panel.tabs("模組頁面",pages,"sig_view")
+    _tick("頁首與頁籤")
     force_refresh=False
     with refresh:
         if st.button("↻" if mobile else "↻ 全部更新" if width>=1500 else "↻ 更新",use_container_width=True,help="全部更新"):
@@ -2118,6 +2144,7 @@ def _dashboard(width,height):
             if catalog:
                 with st.expander("完整股期標的／商品代碼（含非普通股池標的）"):
                     st.dataframe(pd.DataFrame([{"標的":k,"商品代碼":v} for k,v in catalog.items()]),hide_index=True,height=260)
+    _tick("設定選單")
     universe=pd.DataFrame();quotes={};groups={};missing=[];source="";valid=0
     effective_label=mode;frozen=False;update_error=None
     period=periods
@@ -2126,6 +2153,7 @@ def _dashboard(width,height):
         try:
             universe=market_universe()
             stock_names.update(dict(zip(universe.code,universe.name)))
+            _tick("股票名單")
             def load_scan():
                 local_quotes={};label=mode;yahoo_diag=None
                 if force_refresh:
@@ -2180,6 +2208,7 @@ def _dashboard(width,height):
                 return dict(all_sectors=table,groups=local_groups,missing=excluded,valid=count,quotes=local_quotes,
                             market_price=price,asof=date,stamp=stamp,source=src,effective_label=label,yahoo_diagnostic=yahoo_diag)
             scan,frozen,update_error=async_snapshot18(st.session_state,snapshot_key,load_scan,force_refresh)
+            _tick("讀取行情")
             all_sectors=scan['all_sectors'];groups=scan['groups'];missing=list(scan['missing']);valid=scan['valid'];quotes=scan['quotes']
             market_price=scan['market_price'];asof=scan['asof'];stamp=scan['stamp'];source=scan['source'];effective_label=scan['effective_label']
             if frozen:
@@ -2202,7 +2231,7 @@ def _dashboard(width,height):
     sectors=all_sectors.copy()
     strong_count=int((all_sectors['動能(%)']>0).sum())
     total=len(universe) if mode!="原15族群多日" else len({t for a in sector_stocks.values() for t in a})
-    nsectors=15 if mode=="原15族群多日" else (len(sector_groups(universe,grouping)) if not universe.empty else 0)
+    nsectors=15 if mode=="原15族群多日" else (_memo("nsec",(len(universe),grouping),lambda:len(sector_groups(universe,grouping))) if not universe.empty else 0)
     price_text=f"{market_price:,.2f}" if market_price is not None else "—"
     initial_loading=bool(st.session_state.get('scan_jobs18',{}).get('active')) and not quotes
     rank_text='載入中' if initial_loading else f'{valid:,} / {total:,}'
@@ -2216,6 +2245,7 @@ def _dashboard(width,height):
         kpi_left,kpi_right=st.columns([.40,.60],gap="medium")
         with kpi_left:st.markdown(kpi_html(cards[:2]),unsafe_allow_html=True)
         with kpi_right:st.markdown(kpi_html(cards[2:]),unsafe_allow_html=True)
+    _tick("上方卡片")
     warm_chip_reports()
     left,right=st.columns([.40,.60],gap="medium")
     code=None;rs=None;selected=None
@@ -2238,7 +2268,7 @@ def _dashboard(width,height):
             if mode in ("全市場盤中快照","券商即時報價檔"):st.caption("盤中來源失敗不改用昨收；盤後改讀正式收盤資料。尚無成功結果時，請確認來源或稍後更新。")
         elif strategy:
             pool=sectors[sectors["族群板塊"].map(industry_chain.is_preferred)] if focus=="偏好族群" else sectors
-            top,picks=strongest_picks(pool,groups,catalog,quotes,periods,n_sec=10,n=5)
+            top,picks=_memo("picks",(id(groups),periods,focus,len(pool)),lambda:strongest_picks(pool,groups,catalog,quotes,periods,n_sec=10,n=5))
             target=None
             if search and hits:
                 # 搜尋連動：優先選它已入選的族群；否則選它所屬最強族群，不在前十強就附加在表尾、個股標記「搜尋」
@@ -2285,7 +2315,7 @@ def _dashboard(width,height):
         else:
             selected=ranking_grid(sectors,f"sectors9_{mode}_{periods}",rank_height,"族群板塊",pick=hits[0] if hits else None)
             section("","族群成分股",selected)
-            stocks=leader_table(groups[selected],catalog,periods,rising_only,futures_only,rs_filter)
+            stocks=_memo("leaders",(id(groups),selected,periods,rising_only,futures_only,rs_filter),lambda:leader_table(groups[selected],catalog,periods,rising_only,futures_only,rs_filter))
             pick=search if search and selected in hits else None
             if pick and pick not in set(stocks["代號"]):   # 被顯示篩選（上漲、股期、RS）擋掉的搜尋個股仍放在第一列
                 stocks=pd.concat([search_row(pick,selected,groups,catalog,periods),stocks],ignore_index=True)
@@ -2305,6 +2335,7 @@ def _dashboard(width,height):
         note=f"{source} · 排除 {len(missing)} 筆"
         if not universe.empty:note+=f" · 名單 {roc_date(universe.list_date.min()).date()}"
         st.markdown(f'<div class="note-line" title="{escape("；".join(missing))}">{escape(note)}</div>',unsafe_allow_html=True)
+    _tick("左欄")
     pane_names=["K線量能","法人","資券","帳務資訊","選股看盤","訊號績效"]
     # 右欄每個頁面放在各自有 key 的容器：切換頁面時整塊替換，避免上一頁元件殘留（fragment 重繪不會清掉欄內舊元件）
     with right,st.container(key=f"rpane_{pane_names.index(panel) if panel in pane_names else 9}"):
@@ -2354,7 +2385,7 @@ def brand_logo_uri():
 
 
 LUXURY_CSS="""<style>
-.brand-logo{height:52px;width:auto;display:block;flex:none;filter:drop-shadow(0 3px 10px rgba(0,0,0,.6)) drop-shadow(0 0 8px rgba(212,176,98,.12))}
+.brand-logo{height:52px;width:auto;display:block;flex:none}
 .st-key-m_head .brand-logo{height:40px}
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&display=swap');
 :root{--gold:#d4b062;--gold-hi:#f2dea6;--gold-lo:#a8873c;--ink:#08080a;--panel:#12110e;--line:#2f2a1f}
@@ -2367,7 +2398,7 @@ LUXURY_CSS="""<style>
   box-shadow:0 0 0 3px rgba(212,176,98,.08),0 8px 22px rgba(0,0,0,.65);font-family:'Noto Serif TC',Georgia,serif!important}
 /* 卡片：細金邊＋頂部微光 */
 .metric,.sig-card,.hist-stats>div,.sx-bar,.hist-head{background:linear-gradient(165deg,#191710 0%,#0f0e0b 70%)!important;border:1px solid var(--line)!important;
-  box-shadow:inset 0 1px 0 rgba(242,222,166,.07),0 6px 18px rgba(0,0,0,.35)}
+  box-shadow:inset 0 1px 0 rgba(242,222,166,.07)}   /* 只留內側細光，不加外陰影（卡片多時外陰影會拖慢捲動與重繪） */
 .metric:first-child{border-left:3px solid var(--gold)!important}
 .metric-label,.sig-card span,.hist-stats span{letter-spacing:.6px}
 .metric-value,.sig-card b,.hist-stats b{color:#f4eee0!important}
