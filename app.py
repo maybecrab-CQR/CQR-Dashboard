@@ -29,7 +29,7 @@ import os
 
 # 雲端模式：非 Windows 主機（Streamlit Cloud 等）沒有華南元件與憑證，自動關閉登入／下單／帳務；CQR_CLOUD=1/0 可強制開關。
 IS_CLOUD=os.environ.get('CQR_CLOUD')=='1' or (os.environ.get('CQR_CLOUD')!='0' and os.name!='nt')
-MODULES=["主面板","量價訊號"]  # 頂部策略模組；新增模組時加在這裡，並在 dashboard() 補上該模組的左右欄內容
+MODULES=["市場動能","量價策略"]  # 頂部策略模組；新增模組時加在這裡，並在 dashboard() 補上該模組的左右欄內容
 import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -281,10 +281,6 @@ def history(ticker, period, interval="1d"):
             pass
     if frame.empty:raise ValueError("加權指數資料無法取得")
     return frame,taipei_now().strftime("%Y/%m/%d %H:%M:%S")
-
-
-def load_history(ticker,period,interval="1d"):
-    return history(ticker,period,interval)
 
 
 def merge_daily(base,patch):
@@ -873,56 +869,6 @@ def session_quote_snapshot(universe,max_age=120,now=None):
     return quotes,errors,f"{phase} · {source} · {day}",day,f"{phase}收盤 {day:%m/%d}"
 
 
-def resolve_snapshot(state,key,loader):
-    """Keep an explicitly labelled successful snapshot across display-filter reruns."""
-    try:
-        result=loader()
-        if result["valid"]==0 and result["all_sectors"].empty:
-            if not result.get("quotes"):
-                raise ValueError("；".join(result["missing"]) or "沒有有效行情")
-            return result,False,None
-        state[key]=result
-        return result,False,None
-    except Exception as exc:
-        if key in state:return state[key],True,str(exc)
-        raise
-
-
-def intraday_tables(universe,quotes,now=None,max_age=120,closing_day=None):
-    now=pd.Timestamp(now or taipei_now());market=quotes.get("^TWII")
-    columns=["趨勢","族群板塊","動能(%)","漲幅(%)","覆蓋","資料日"]
-    empty=pd.DataFrame(columns=columns)
-    def fresh(q):
-        if not q:return False
-        ts=q["timestamp"]
-        if closing_day is not None:return ts.date()==closing_day
-        age=(now-ts).total_seconds()
-        return ts.date()==now.date() and -5<=age<=max_age
-    if not fresh(market):return empty,{},["加權指數非當日有效報價或已過期"],0
-    valid={};missing=[]
-    for code in universe.code:
-        q=quotes.get(code)
-        if not fresh(q) or abs((q["timestamp"]-market["timestamp"]).total_seconds())>max_age:
-            missing.append(code);continue
-        valid[code]=q
-    index=pd.DatetimeIndex([market["timestamp"]-pd.Timedelta(days=1),market["timestamp"]])
-    market_ratio=market["price"]/market["reference"]
-    groups={};rows=[]
-    for name,members in universe.groupby("sector",sort=True):
-        eligible=members[members.code.isin(valid)]
-        minimum=max(min(3,len(members)),math.ceil(len(members)*.8))
-        if len(eligible)<minimum:continue
-        ratios=[valid[c]["price"]/valid[c]["reference"] for c in eligible.code]
-        sector_ratio=sum(ratios)/len(ratios)
-        rs=sector_ratio/market_ratio-1
-        basket=pd.DataFrame({"Close":[100,100*sector_ratio]},index=index)
-        prices={r.ticker:pd.Series([valid[r.code]["reference"],valid[r.code]["price"]],index=index) for r in eligible.itertuples()}
-        groups[name]={"rs":rs,"basket":basket,"members":prices,"missing":list(members.loc[~members.code.isin(valid),"code"]),"quotes":{c:valid[c] for c in eligible.code}}
-        rows.append({"趨勢":"強勢" if rs>0 else "弱勢","族群板塊":name,"動能(%)":rs*100,"漲幅(%)":(sector_ratio-1)*100,
-                     "覆蓋":f"{len(eligible)}/{len(members)}","資料日":str(market["timestamp"].date())})
-    return pd.DataFrame(rows,columns=columns).sort_values("動能(%)",ascending=False).reset_index(drop=True),groups,missing,len(valid)
-
-
 @st.cache_data(ttl=300,show_spinner=False)
 def historical_close_snapshot(day):
     quotes,errors,source=closing_quotes(day)
@@ -1157,30 +1103,6 @@ def chip_report(market,kind,day):
     return parse_chip_report(get_json(url,params),market,kind,day)
 
 
-@st.cache_data(ttl=300,show_spinner=False)
-def latest_chip_report(market,kind,target):
-    day=target;errors=[]
-    for attempt in range(3):
-        try:return {'records':chip_report(market,kind,day),'date':day,'errors':errors}
-        except Exception as exc:errors.append(f'{day}：{exc}')
-        day=expected_session(datetime.combine(day,time(8),tzinfo=ZoneInfo('Asia/Taipei')))
-        if day is None:break
-    return {'records':{},'date':None,'errors':errors}
-
-
-def load_stock_chips(code,market,target):
-    if target is None:return {kind:{'record':None,'date':None,'status':'交易日曆待確認','errors':[]} for kind in ('institution','margin')}
-    def read(kind):
-        try:
-            report=latest_chip_report(market,kind,target)
-            record=report['records'].get(code)
-            status='查詢交易日已發布' if report['date']==target else '較早資料・請留意日期'
-            if record is None:status='報表未列此股（不代表為零）' if report['date'] else '來源未就緒'
-            return kind,{'record':record,'date':report['date'],'status':status,'errors':report['errors']}
-        except Exception as exc:return kind,{'record':None,'date':None,'status':'來源未就緒','errors':[str(exc)]}
-    with ThreadPoolExecutor(max_workers=2) as pool:return dict(pool.map(read,('institution','margin')))
-
-
 CHIP_CSS='''<style>
 [data-testid="stSelectbox"] select,[data-testid="stSelectbox"] [role="combobox"],[data-testid="stSelectbox"] [data-baseweb="select"]>div{background:#17222f!important;color:#d5dfec!important;border-color:#394759!important}
 [data-testid="stButtonGroup"] button{background:#14202c!important;color:#bab3a3!important;border-color:#394759!important}
@@ -1191,38 +1113,6 @@ CHIP_CSS='''<style>
 [data-testid="stTabs"] [data-baseweb="tab-list"]{gap:20px}[data-testid="stTabs"] [data-baseweb="tab"]{font-size:17px;height:42px}
 @media(max-height:820px){.chip-shell{padding:12px;margin-bottom:8px}.chip-card{padding:9px}.chip-heading{margin-bottom:8px}.chip-value{font-size:21px}.chip-margin td{padding:3px 0!important;font-size:14px;line-height:1.25!important}.chip-note{margin-top:7px;font-size:12px}.chip-title{margin-bottom:8px;font-size:23px}}
 </style>'''
-
-
-def render_chip_panel(code,name,market,chips):
-    def num(v,signed=False):return (f'{round(v):+,}' if round(v) else '0') if signed else f'{round(v):,}'   # 張數取整數
-    def color(v):return 'chip-up' if v>0 else 'chip-down' if v<0 else 'chip-neutral'
-    def heading(title,info):
-        date=info['date'].isoformat() if info['date'] else '日期待確認'
-        return f'<div class="chip-heading"><b>{title}</b><span class="chip-date">{date} · 張</span></div><div class="chip-status">{escape(info["status"])}</div>'
-    out=f'<div class="chip-title">{escape(name)}<small>{escape(code)} · {market} · 盤後籌碼</small></div>'
-    info=chips['institution'];r=info['record'];out+='<div class="chip-shell">'+heading('三大法人買賣超',info)
-    if r:
-        out+='<div class="chip-grid">'+''.join(f'<div class="chip-card"><div class="chip-label">{label}</div><div class="chip-value {color(r[key])}">{num(r[key],True)}</div></div>' for key,label in [('foreign','外資及陸資'),('trust','投信'),('dealer','自營商'),('total','三大法人合計')])+'</div>'
-        out+='<div class="chip-note">正值＝買超，負值＝賣超；自營商含自行買賣與避險。'+('外資不含外資自營商。' if market=='上市' else '外資採櫃買中心外資及陸資合計口徑。')+'</div>'
-    else:out+='<div class="chip-empty">尚無可顯示數字；未列入報表不等於買賣超為 0。</div>'
-    out+='</div>';info=chips['margin'];r=info['record'];out+='<div class="chip-shell">'+heading('融資融券',info)
-    if r:
-        out+='<div class="chip-margin">'
-        for prefix,title in [('fin','融資'),('short','融券')]:
-            out+=f'<div><h4>{title}餘額 <span class="chip-neutral">{num(r[prefix+"_balance"])}</span> 張</h4><table>'
-            for suffix,label in [('change','較前日增減'),('previous','前日餘額'),('buy','買進' if prefix=='fin' else '買進回補'),('sell','賣出' if prefix=='fin' else '賣出'),('repay','現金償還' if prefix=='fin' else '現券償還')]:
-                v=r[prefix+'_'+suffix];cls=color(v) if suffix=='change' else 'chip-neutral'
-                out+=f'<tr><td>{label}</td><td class="{cls}">{num(v,suffix=="change")}</td></tr>'
-            out+='</table></div>'
-        out+='</div><div class="chip-note">餘額增減＝當日餘額－前日餘額。增減顏色只表示方向，不代表看多或看空；融券不含借券賣出。</div>'
-    else:out+='<div class="chip-empty">尚無可顯示數字；可能尚未發布、來源失敗或報表未列此股，不以 0 代替。</div>'
-    out+='</div>'
-    source='臺灣證券交易所' if market=='上市' else '證券櫃檯買賣中心'
-    out+=f'<div class="chip-note">來源：{source}｜兩類資料分別核對日期。資料僅供觀察，不改變 RS 排名；每 5 分鐘重查，亦可按「全部更新」。</div>'
-    st.markdown(out,unsafe_allow_html=True)
-    errors=[e for info in chips.values() for e in info['errors']]
-    if errors:
-        with st.expander('資料發布／來源狀態'):st.write('\n\n'.join(errors))
 
 
 @st.cache_data(ttl=300,show_spinner=False)
@@ -1286,13 +1176,17 @@ def interactive_chart_component():
     # 之後換成本機 blob 網址交給圖表；Cache Storage 不可用時退回一般相對路徑。
     lib=f'plotly-{get_plotlyjs_version()}.min.js'
     (path/lib).write_text(plotly_bundle(),encoding='utf-8')
-    (path/'index.html').write_text('''<!doctype html><html><body style="margin:0;overflow:hidden"><iframe id="inner" style="width:100%;border:0;display:block" title="互動K線"></iframe><script>
+    (path/'index.html').write_text('''<!doctype html><html><body style="margin:0;overflow:hidden"><iframe id="inner" style="width:100%;border:0;display:block" title="互動K線" allow="fullscreen" allowfullscreen></iframe><script>
 const frame=document.getElementById('inner');let last='';const LIB="'''+lib+'''";let libUrl=LIB;
 const libReady=(async()=>{try{const c=await caches.open('cqr-lib');let r=await c.match(LIB);
 if(!r){for(const k of await c.keys())await c.delete(k);await c.add(LIB);r=await c.match(LIB);}
 libUrl=URL.createObjectURL(await r.blob());}catch(err){libUrl=LIB;}})();
 const send=(type,extra={})=>parent.postMessage({isStreamlitMessage:true,type,...extra},'*');
-window.addEventListener('message',e=>{if(e.data.type==='streamlit:render'){const a=e.data.args;frame.style.height=a.height+'px';if(last!==a.html){const html=a.html;last=html;libReady.then(()=>{if(last===html)frame.srcdoc=html.replace('src="plotly.min.js"','src="'+libUrl+'"');});}send('streamlit:setFrameHeight',{height:a.height});}
+let pending=null;const load=html=>libReady.then(()=>{if(last===html)frame.srcdoc=html.replace('src="plotly.min.js"','src="'+libUrl+'"');});
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&pending){const h=pending;pending=null;last=h;load(h);}});
+window.addEventListener('message',e=>{if(e.data.type==='streamlit:render'){const a=e.data.args;frame.style.height=a.height+'px';if(last!==a.html){const html=a.html;
+/* 全螢幕中先不重載（重載會強制退出全螢幕），退出後再套用最新內容 */
+if(document.fullscreenElement){pending=html;}else{last=html;load(html);}}send('streamlit:setFrameHeight',{height:a.height});}
 if(e.source===frame.contentWindow&&e.data.type==='cq-timeframe'&&['日K','周K','月K','1分','15分','30分','60分'].includes(e.data.value)){send('streamlit:setComponentValue',{value:{timeframe:e.data.value,event:Date.now()},dataType:'json'});}});
 send('streamlit:componentReady',{apiVersion:1});
 </script></body></html>''',encoding='utf-8')
@@ -1352,14 +1246,14 @@ def chip_trend_html(rows,kind,mode,height):
 HISTORY_FILE=Path(__file__).resolve().parent/"signal_history.csv"
 HISTORY_RULES={
     "v3":("5MV 帶出 13MV 的第一天、34MV 上揚；站上並扣低 21MA、10 日強於大盤；族群強於大盤且排族群前三；當天收紅、強於大盤、收在上半部；只做電子／重電／綠能；大盤在 60MA 之上 → 當天收盤買",
-          "停損＝進場前 3 日最低；極限大量後量縮不見高先"+xiao_panel.xs._part_label(xiao_panel.xs.PART_EXIT)+"；跌破停損、跌破 21MA、8／21MA 扣高且收破 8MA 全出；不設持有天數上限；出場訊號隔天開盤賣"),
+          "停損＝進場前 3 日最低；收盤比進場價跌超過 10% 全出；極限大量後量縮不見高先"+xiao_panel.xs._part_label(xiao_panel.xs.PART_EXIT)+"；跌破停損、跌破 21MA、8／21MA 扣高且收破 8MA 全出；不設持有天數上限；出場訊號隔天開盤賣"),
     "v2":("攻擊（量增價漲）後 2～12 天內回檔量縮、角度緩、守住攻擊日低點；凹洞量回升（量大於昨天與 5 天前）、收紅；尚未突破攻擊高點；大盤在 60MA 之上 → 當天收盤買",
-          "停損＝回檔低點；其餘同 v3"),
+          "停損＝回檔低點；收盤比進場價跌超過 10% 全出；其餘同 v3"),
 }
 
 
 @st.cache_data(ttl=3600,show_spinner=False)
-def load_history(mtime):
+def load_trade_history(mtime):
     df=pd.read_csv(HISTORY_FILE,dtype={"code":str},parse_dates=["signal_date","half_date","exit_date"])
     return df
 
@@ -1486,9 +1380,9 @@ def render_trade_history(height):
     """前瞻紀錄頁 →「回測紀錄」：每一筆歷史交易（進出場日期、價格、原因、報酬），點選後在 K 線上標出進出場點。"""
     if not HISTORY_FILE.exists():
         st.info("尚未產生回測紀錄（本機執行 python research/export_history.py）。");return
-    df=load_history(HISTORY_FILE.stat().st_mtime)
+    df=load_trade_history(HISTORY_FILE.stat().st_mtime)
     c1,c2,c3=st.columns([1.5,1.3,1],gap="small",vertical_alignment="center")
-    with c1:kind=st.segmented_control("策略",["v3 波段量啟動","v2 凹洞量轉折"],default="v3 波段量啟動",key="hist_kind",label_visibility="collapsed") or "v3 波段量啟動"
+    with c1:kind=xiao_panel.tabs("策略",["v3 波段量啟動","v2 凹洞量轉折"],"hist_kind")
     periods={"近一年":365,"2021–26（驗證期）":"2021","2015–20（設計期）":"2015","全部":None}
     with c2:per=st.selectbox("期間",list(periods),key="hist_period",label_visibility="collapsed")
     with c3:res=st.selectbox("結果",["全部","獲利","虧損","持有中"],key="hist_result",label_visibility="collapsed")
@@ -1989,8 +1883,14 @@ def quote_label19(quote,mode,now=None):
     return f'{source} · {phase} · {stamp:%m/%d %H:%M:%S}'
 
 
-@st.fragment(run_every='30s')
-def render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_period=10,show_head=True,marks=(),levels=()):
+def render_chart(*args,**kw):
+    """盤中（交易日 09:00～13:35）每 30 秒自動更新報價與 K 線；其他時間只畫一次，不在背景反覆重繪（省 CPU、圖表也不會重載）。"""
+    now=taipei_now()
+    live=time(9)<=now.time()<time(13,35) and expected_session(now.replace(hour=14))==now.date()
+    return (_render_chart_live if live else _render_chart_idle)(*args,**kw)
+
+
+def _render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_period=10,show_head=True,marks=(),levels=()):
     ticker=ticker or f"{code}.TW"
     mode=st.session_state.get('scan_mode16','全市場收盤')
     quote_error=None;now=pd.Timestamp(taipei_now())
@@ -2038,6 +1938,10 @@ def render_chart(code,rs,chart_space,quote=None,stock_name=None,ticker=None,rs_p
     note=f"K線來源：{source} · 未還原價 · 所選個股報價與板塊排名分別更新"
     if len(frame)<52:note+=f" · 僅 {len(frame)} 根，MA52 尚不足"
     st.markdown(f'<div class="note-line" title="{escape(note)}">{escape(note)}</div>',unsafe_allow_html=True)
+
+
+_render_chart_live=st.fragment(run_every='30s')(_render_chart)
+_render_chart_idle=st.fragment(_render_chart)
 
 
 def yahoo_minute_frame(frame):
@@ -2166,16 +2070,16 @@ def _dashboard(width,height):
     with brand_col:st.markdown('<div class="brand"><div class="brand-left">'+mark+'<div><div class="eyebrow">CHEN QUANT RESEARCH</div><div class="brand-title">全市場動能決策臺</div></div></div></div>',unsafe_allow_html=True)
     with nav_col,st.container(key="module_nav"):
         # 策略模組：之後新增的模組加在這個清單即可
-        module=st.segmented_control("策略模組",MODULES,default=MODULES[0],key="module",label_visibility="collapsed") or MODULES[0]
+        module=xiao_panel.tabs("策略模組",MODULES,"module")   # 點已選的頁籤不會取消；舊名稱自動重設
     if login is not None:
         with login:huanan_panel.login_control()
     with view:
-        if module=="主面板":
+        if module==MODULES[0]:
             tabs=["K線量能","法人","資券"] if IS_CLOUD or mobile else ["K線量能","法人","資券","帳務資訊"]
-            if st.session_state.get("view11") not in [None]+tabs:st.session_state["view11"]="K線量能"
-            panel=st.segmented_control("個股資訊",tabs,default="K線量能",key="view11",label_visibility="collapsed") or "K線量能"
+            panel=xiao_panel.tabs("個股資訊",tabs,"view11")
         else:
-            panel=st.segmented_control("模組頁面",["板塊選股","前瞻紀錄"],default="板塊選股",key="sig_view",label_visibility="collapsed") or "板塊選股"
+            pages=["選股看盤","訊號績效"]
+            panel=xiao_panel.tabs("模組頁面",pages,"sig_view")
     force_refresh=False
     with refresh:
         if st.button("↻" if mobile else "↻ 全部更新" if width>=1500 else "↻ 更新",use_container_width=True,help="全部更新"):
@@ -2316,8 +2220,8 @@ def _dashboard(width,height):
     left,right=st.columns([.40,.60],gap="medium")
     code=None;rs=None;selected=None
     sig_row=None;sig_stamp="—"
-    with left:
-        strategy=module=="量價訊號"
+    with left,st.container(key=f"lpane_{MODULES.index(module) if module in MODULES else 0}"):   # 左欄依模組分容器，切換時不殘留
+        strategy=module==MODULES[1]
         search=stock_search(universe) if not universe.empty else None
         linked=False   # 搜尋個股是否已在表格中選取
         order=list(sectors["族群板塊"]) if not sectors.empty else []
@@ -2325,8 +2229,7 @@ def _dashboard(width,height):
         if strategy:
             with st.container(key="pick_head"):head_l,head_r=st.columns([1.25,1],gap="small",vertical_alignment="center")
             with head_r:
-                focus=st.segmented_control("族群範圍",["偏好族群","全部族群"],default="偏好族群",key="sig_focus",label_visibility="collapsed",
-                                           help="偏好族群＝電子、重電、綠能（老師的選股範圍；v3 回測只做這些）") or "偏好族群"
+                focus=xiao_panel.tabs("族群範圍",["偏好族群","全部族群"],"sig_focus")   # 偏好族群＝電子、重電、綠能（v3 回測只做這些）
             with head_l:section("","前十強板塊",f"{periods}日 RS · 前五強",cls="lead")
         else:section("","板塊相對強弱",f"{periods}日 RS · 全部板塊",cls="lead")
         if sectors.empty:
@@ -2402,18 +2305,20 @@ def _dashboard(width,height):
         note=f"{source} · 排除 {len(missing)} 筆"
         if not universe.empty:note+=f" · 名單 {roc_date(universe.list_date.min()).date()}"
         st.markdown(f'<div class="note-line" title="{escape("；".join(missing))}">{escape(note)}</div>',unsafe_allow_html=True)
-    with right:
+    pane_names=["K線量能","法人","資券","帳務資訊","選股看盤","訊號績效"]
+    # 右欄每個頁面放在各自有 key 的容器：切換頁面時整塊替換，避免上一頁元件殘留（fragment 重繪不會清掉欄內舊元件）
+    with right,st.container(key=f"rpane_{pane_names.index(panel) if panel in pane_names else 9}"):
         if code:
             row=universe.loc[universe.code==code]
             name=stock_names.get(code,code)
             market=row.iloc[0].market if len(row) else ("上櫃" if any(code+'.TWO' in g['members'] for g in groups.values()) else "上市")
             if panel=="帳務資訊":
                 huanan_panel.render_account(workspace)
-            elif panel=="前瞻紀錄":
+            elif panel=="訊號績效":
                 # 有排程掃描檔就直接讀；沒有（例如雲端）才即時算候選股
                 has_scan=(xiao_panel.LOG_DIR/"latest_scan.csv").exists()
                 xiao_panel.render_v2([] if has_scan else signal_candidates(all_sectors,groups,quotes,periods,code),code,workspace,history=render_trade_history,picker=render_pick)
-            elif panel=="板塊選股":
+            elif panel=="選股看盤":
                 if not IS_CLOUD and not mobile:huanan_panel.render_ticket(code,name)
                 else:st.markdown(f'<div class="stock-head"><h2>{escape(name)}</h2><span class="stock-code">{escape(code)}</span></div>',unsafe_allow_html=True)
                 xiao_panel.render_status(sig_row,sig_stamp)
