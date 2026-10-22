@@ -308,7 +308,9 @@ def entries_v2(x):
 # 極限大量後量縮不見高先出的比例：0.5＝出一半、1/3＝出三分之一、1.0＝全出（之後符合條件再重新進場）
 # 2026-10-22 改為 1/3：設計期每筆 +1.47%→+1.61%、驗證期 +2.08%→+2.27%，兩期的 5／10 檔年化都較高（docs 10.9）
 PART_EXIT = 1 / 3
-HALF_EXIT = PART_EXIT < 1                       # 舊名稱相容
+# 最大虧損：收盤比進場價跌超過此比例就全部出場（隔天開盤賣）。2026-10-22 加入：原本停損固定在進場前 3 日最低，
+# 中位數離進場價 9%、最遠 27%，曾虧到 −30%。加入後兩期年化都較高、虧損超過 15% 的筆數減半（docs 10.11）
+MAX_LOSS = 0.10
 
 
 def _part_label(p):
@@ -324,7 +326,8 @@ def pending_exit(x, e, stop, **kw):
     return [(w, r) for k, w, r in exit_path(y, e, stop, **kw) if k == n and not r.startswith("持有")]
 
 
-def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False, fire=False, diverge=False, half=None, part=None):
+def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=False, fire=False, diverge=False, half=None, part=None,
+              max_loss=MAX_LOSS):
     """從 e 日起逐日檢查，回傳 [(出場idx, 比例, 原因)]；出場在判斷日的下一日開盤成交。沒有出場訊號時最後一筆為「持有中」。
     max_hold=None（預設）：不設持有天數上限（漲時不預設頂），只依出場訊號離場。
     climax_rule：'avg20'＝量 ≥ 前 20 日均量 2.5 倍（預設）；'mv5'＝量 ≥ 前一日 5MV 的 160%（影片：波段攻擊量的 160%）。
@@ -356,6 +359,8 @@ def exit_path(x, e, stop, max_hold=MAX_HOLD, climax_rule="avg20", tide_exit=Fals
         reason = None
         if c < stop:
             reason = "跌破回檔低點"
+        elif max_loss and c < cc[e - 1] * (1 - max_loss):
+            reason = f"虧損超過{max_loss:.0%}"
         elif tide_exit and j - 2 >= 0 and v13[j] < v13[j - 1] and v13[j - 1] >= v13[j - 2]:
             reason = "13MV轉折（潮汐量退）"
         elif c < x.ma21.iat[j]:
