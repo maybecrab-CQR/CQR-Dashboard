@@ -40,8 +40,11 @@ background:#241f38;color:#d2c3ff;border:1px solid #5b4a8f;margin:2px 4px 0 0}
 .hist-stats>div{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:9px;padding:5px 10px;min-width:0}
 .hist-stats span{display:block;font-size:13px;color:#9b9484}.hist-stats b{font-size:18px;color:#f0eadb;white-space:nowrap;font-variant-numeric:tabular-nums}
 .sig-card span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sig-card b{white-space:nowrap}
-.hist-rule{font-size:12.5px;color:#a8a191;line-height:1.45;margin:0 0 6px;height:72px;overflow:auto;padding:5px 9px;border:1px solid #2f2a1f;border-radius:8px;background:#100f0d}.hist-rule b{color:#c9a552;margin-right:6px;font-weight:600}
-.hist-head{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:6px 12px;margin:0 0 6px;min-height:66px;max-height:96px;overflow:hidden}
+.hist-rule{font-size:12.5px;color:#a8a191;line-height:1.45;margin:0;height:80px;box-sizing:border-box;overflow:auto;padding:5px 9px;border:1px solid #2f2a1f;border-radius:8px;background:#100f0d}.hist-rule b{color:#c9a552;margin-right:6px;font-weight:600}
+.hist-head{background:linear-gradient(115deg,#19170f,#0c0b0a);border:1px solid #2f2a1f;border-radius:10px;padding:6px 12px;margin:0;height:80px;box-sizing:border-box;overflow:hidden}
+/* 說明卡與規則框固定 80px，所在的元件容器也固定高度、不留額外間距：左右兩欄的表格與 K 線才能上下對齊 */
+.stElementContainer:has(.hist-head),.stElementContainer:has(.hist-rule){height:80px!important;min-height:80px!important;margin:0!important}
+[data-testid="stMarkdownContainer"]:has(.hist-head),[data-testid="stMarkdownContainer"]:has(.hist-rule){margin-bottom:0!important}
 .hist-title{display:flex;align-items:baseline;gap:8px;font-size:15px;color:#a8a191;white-space:nowrap}.hist-title b{font-size:19px;color:#f4eee0}
 .hist-title i{font-style:normal;font-size:13px;color:#8a8374}.hist-title em{margin-left:auto;font-style:normal;font-size:20px;font-weight:700}
 .hist-legs{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#d2cbbb;line-height:1.45;font-variant-numeric:tabular-nums}
@@ -278,8 +281,7 @@ def render_v2(cands, selected_code, workspace, history=None, picker=None):
     with tcol:
         st.markdown(f'<div class="sig-head"><b>蕭氏日線訊號</b><span title="{escape(source)}">資料日 {asof} · '
                     f'{"排程掃描" if "排程" in source else "即時計算（候選股）"}</span></div>', unsafe_allow_html=True)
-    # 每個頁面放在各自有 key 的容器：切換頁面時整塊替換，避免上一頁的元件殘留（fragment 重繪時欄內元件不會被清掉）
-    with st.container(key=f"sigview_{views.index(view)}"):
+    with st.container():
         if view == "歷史回測":
             if history is not None:
                 history(max(420, workspace - 50))
@@ -340,7 +342,7 @@ def _view_today(today, scan, bull_txt, liao_txt, t3, s3, picker, selected_code, 
     if today.empty:
         st.info("今天沒有訊號、量縮整理或波段進行中的股票。")
     else:
-        picker("today", today.assign(label=today.state.map(lambda k: V2_STATE.get(k, (k, "", 9))[0])), avail - 70)
+        picker("today", today.assign(label=today.state.map(lambda k: V2_STATE.get(k, (k, "", 9))[0])), avail - 84)   # 下方還有「規則與徽章說明」
     _rules_note()
 
 
