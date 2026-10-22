@@ -37,16 +37,7 @@ def ma_will_rise(close, n):
     return np.sign(diff)
 
 
-def ma_slope_pct(close, n, lookback=1):
-    """n 期均線每根的斜率（%）。"""
-    ma = close.rolling(n).mean()
-    return (ma / ma.shift(lookback) - 1) * 100 / lookback
-
-
 # ---------- 角度 ----------
-def wave_angle(close, bars):
-    """最近 bars 根的平均漲跌幅（%/根）。用於「同位對照」：比較上漲波與下跌波的陡峭程度。"""
-    return (close / close.shift(bars) - 1) * 100 / bars
 
 
 # ---------- 量 ----------
@@ -64,20 +55,6 @@ def slot_volume_ratio(bars, lookback_days=10):
     return pd.Series(out, index=bars.index).replace([np.inf, -np.inf], np.nan)
 
 
-def cumulative_volume_pace(bars, lookback_days=10):
-    """當日累積量 ÷ 過去日子同一時點的平均累積量（量能步調）。"""
-    df = bars[["Volume"]].copy()
-    df["day"] = df.index.date
-    df["slot"] = df.index.strftime("%H:%M")
-    df["cum"] = df.groupby("day")["Volume"].cumsum()
-    pivot = df.pivot_table(index="day", columns="slot", values="cum", aggfunc="last")
-    hist = pivot.shift(1).rolling(lookback_days, min_periods=max(3, lookback_days // 2)).mean()
-    ref = hist.stack().rename("ref")
-    keyed = df.set_index(["day", "slot"], append=True)
-    out = df["cum"].values / keyed.join(ref, on=["day", "slot"])["ref"].values
-    return pd.Series(out, index=bars.index).replace([np.inf, -np.inf], np.nan)
-
-
 # ---------- 盤中均價線與相對強弱 ----------
 def intraday_vwap(bars):
     """盤中均價線（看盤軟體的黃色線）：當日累積 典型價×量 ÷ 累積量。"""
@@ -87,8 +64,3 @@ def intraday_vwap(bars):
     vol = bars["Volume"].groupby(day).cumsum()
     return (pv / vol.replace(0, np.nan)).ffill()
 
-
-def intraday_change(bars, prev_close):
-    """相對昨收的盤中漲跌幅（%）。prev_close：以日期為 key 的昨收序列。"""
-    ref = pd.Series(bars.index.date, index=bars.index).map(prev_close)
-    return (bars["Close"] / ref - 1) * 100
