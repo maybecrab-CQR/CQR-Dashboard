@@ -19,8 +19,6 @@ DEFAULT_SERVER = "fvipb.entrust.com.tw"
 PRICE_TYPE = {"限價": "L", "市價": "M", "範圍市價": "P"}
 EFF = {"ROD": "R", "IOC": "I", "FOK": "F"}
 OPEN_CLOSE = {"自動": "", "新倉": "0", "平倉": "1", "當沖": "2"}
-ORDER_COLUMNS = {"ORDERNO": "委託書號", "ORDERTIME": "時間", "BS": "買賣", "PRODUCTID": "商品", "ORDERPRICE": "價格",
-                 "ORDERQTY": "委託量", "MATCHQTY": "成交量", "NOMATCHQTY": "未成交", "DELQTY": "刪除量", "ORDERSTATUS": "狀態"}
 
 CSS = """<style>
 .st-key-hn_sell div button,.st-key-hn_buy div button{height:46px!important;border-radius:8px!important;color:#fff!important;width:100%}
@@ -310,8 +308,12 @@ def _pnl_cell(value):
     return (_fmt(value, 0), ' class="acct-up"' if number and number > 0 else ' class="acct-down"' if number and number < 0 else "")
 
 
-@st.fragment(run_every="5s")
 def render_account(workspace):
+    """已登入：每 5 秒更新部位與委託；未登入：只畫一次登入提示，不在背景反覆重跑。"""
+    (_account_live if is_logged_in(status()) else _account_idle)(workspace)
+
+
+def _render_account(workspace):
     info = status()
     if not is_logged_in(info):
         st.markdown('<div class="acct-gate">尚未登入券商。登入後可查看保證金、部位、委託與成交。</div>', unsafe_allow_html=True)
@@ -365,3 +367,7 @@ def render_account(workspace):
                          (escape(str(x.get("result", ""))[:40]), "")] for x in logs[::-1][:20]], "尚無紀錄"), unsafe_allow_html=True)
     with st.expander("橋接程式訊息／API 錯誤"):
         st.code("\n".join(info.get("errors", [])[::-1] + [""] + info.get("messages", [])[::-1]) or "—", language=None)
+
+
+_account_live = st.fragment(run_every="5s")(_render_account)
+_account_idle = st.fragment(_render_account)
