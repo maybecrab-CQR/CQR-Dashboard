@@ -87,9 +87,11 @@ def _bridge_up(timeout=0.15):
 
 
 def status(fresh=False):
-    """橋接程式狀態；2 秒內重複查詢直接用上次結果（同一次畫面會查好幾次）。"""
+    """橋接程式狀態；2 秒內重複查詢直接用上次結果（同一次畫面會查好幾次）。
+    橋接程式沒開（未登入）時改為 15 秒內沿用：否則每次換頁都要等連線逾時 0.15 秒。登入流程用 fresh=True 立即重查。"""
     now = time.monotonic()
-    if not fresh and now - _STATUS["t"] < 2.0:
+    ttl = 2.0 if _STATUS["v"] is not None else 15.0
+    if not fresh and now - _STATUS["t"] < ttl:
         return _STATUS["v"]
     value = _get("/status", timeout=1.5) if _bridge_up() else None
     _STATUS.update(t=now, v=value)
