@@ -179,13 +179,30 @@ def exchange_holidays(year):
     return holidays
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def unscheduled_closures(month):
+    """臨時休市日（颱風假等）：證交所休市表不會列出，改以官方加權指數日資料為準——
+    該月到「最後一個已公布交易日」為止，沒有交易紀錄的平日就是休市。資料取不到時回傳空集合（只用休市表）。
+    例：2026-10-23 颱風休市不在休市表內，曾讓程式以為前一交易日是 10/23、整個 10 日 RS 排名停擺。"""
+    try:
+        frame=month_frame("^TWII",month)
+    except Exception:
+        return frozenset()
+    if frame is None or frame.empty:return frozenset()
+    traded={d.date() for d in frame.index}
+    first=pd.Timestamp(month).date();last=max(traded)
+    return frozenset(d.date() for d in pd.bdate_range(first,last) if d.date() not in traded)
+
+
 def expected_session(now=None):
     now=now or taipei_now()
     try:
-        holidays=exchange_holidays(now.year)
+        holidays=set(exchange_holidays(now.year))
         if now.month==1 and now.day<=7:holidays|=exchange_holidays(now.year-1)
     except Exception:
         return None
+    for month in ((pd.Timestamp(now)-pd.DateOffset(months=1)).strftime("%Y%m01"),pd.Timestamp(now).strftime("%Y%m01")):
+        holidays|=unscheduled_closures(month)   # 再補上休市表沒有的臨時休市（颱風假）
     day=now.date() if now.time()>=time(13,30) else now.date()-timedelta(days=1)
     while day.weekday()>=5 or day in holidays:
         day-=timedelta(days=1)
@@ -2376,7 +2393,8 @@ def _dashboard(width,height):
 
         else:
             st.info("排名不足仍可檢查已取得報價的個股；這不代表該股已通過RS篩選。")
-            available=[c for c in quotes if c!='^TWII']
+            listed=set(universe.code) if not universe.empty else set()
+            available=sorted(c for c in quotes if c in listed)   # 只列名單內的普通股（報價來源也會回傳 ETF 等，例如 00400A）
             if available:
                 inspect_code=st.selectbox('獨立檢視已收到的個股',available,format_func=lambda c:c+' '+stock_names.get(c,c))
                 matched=universe.loc[universe.code==inspect_code]
