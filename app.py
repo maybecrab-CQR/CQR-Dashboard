@@ -269,6 +269,12 @@ def normalize(frame):
     return frame.loc[~frame.index.duplicated(keep="last")].dropna(subset=["Close"])
 
 
+def drop_no_trade(frame):
+    """拿掉沒有成交的日 K：Yahoo 在休市日（例如 2026-10-23 颱風休市）會補一筆開高低收都等於前一日收盤、成交量 0 的假資料。"""
+    if frame is None or frame.empty or not {"Volume","High","Low"}<=set(frame.columns):return frame
+    return frame[~((frame["Volume"].fillna(0)<=0)&(frame["High"]==frame["Low"]))]
+
+
 def yahoo_history(ticker,period,interval="1d",adjusted=True):
     # 同時查長區間與近一個月，解決部分 Yahoo 長區間回應落後。
     obj=yf.Ticker(ticker);parts=[];errors=[]
@@ -343,7 +349,7 @@ def chart_history(ticker, period, interval):
             except Exception as exc:notes.append(str(exc))
             if len(frame)>=65:break
     if frame.empty:raise ValueError("Yahoo 與證交所皆無資料："+"; ".join(notes))
-    frame=frame.dropna(subset=["Open","High","Low","Close"]).sort_index()
+    frame=drop_no_trade(frame.dropna(subset=["Open","High","Low","Close"]).sort_index())   # 休市日的假 K 棒不畫（周／月 K 由此彙總，也一併修正）
     last_trade=frame.index[-1].date()
     if interval in ("1wk","1mo"):
         rule="W-MON" if interval=="1wk" else "MS"
